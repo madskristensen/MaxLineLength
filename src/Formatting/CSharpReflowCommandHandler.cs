@@ -1,0 +1,114 @@
+using System.Collections.Generic;
+using System.ComponentModel.Composition;
+using Microsoft.CodeAnalysis.Text;
+using Microsoft.VisualStudio.Commanding;
+using Microsoft.VisualStudio.Text;
+using Microsoft.VisualStudio.Text.Editor;
+using Microsoft.VisualStudio.Text.Editor.Commanding.Commands;
+using Microsoft.VisualStudio.Text.Operations;
+using Microsoft.VisualStudio.Utilities;
+
+namespace MaxLineLength
+{
+    [Export(typeof(ICommandHandler))]
+    [ContentType("CSharp")]
+    [Name(nameof(CSharpReflowCommandHandler))]
+    [Order(Before = "Format Document")]
+    [TextViewRole(PredefinedTextViewRoles.Editable)]
+    internal sealed class CSharpReflowCommandHandler :
+        IChainedCommandHandler<FormatDocumentCommandArgs>,
+        IChainedCommandHandler<FormatSelectionCommandArgs>
+    {
+        private readonly ITextUndoHistoryRegistry _undoHistoryRegistry;
+
+        [ImportingConstructor]
+        public CSharpReflowCommandHandler(ITextUndoHistoryRegistry undoHistoryRegistry)
+        {
+            _undoHistoryRegistry = undoHistoryRegistry;
+        }
+
+        public string DisplayName => "Max line length reflow";
+
+        public CommandState GetCommandState(
+            FormatDocumentCommandArgs args,
+            Func<CommandState> nextCommandHandler)
+        {
+            return nextCommandHandler();
+        }
+
+        public CommandState GetCommandState(
+            FormatSelectionCommandArgs args,
+            Func<CommandState> nextCommandHandler)
+        {
+            return nextCommandHandler();
+        }
+
+        public void ExecuteCommand(
+            FormatDocumentCommandArgs args,
+            Action nextCommandHandler,
+            CommandExecutionContext executionContext)
+        {
+            Execute(args.TextView, args.SubjectBuffer, selectionOnly: false, nextCommandHandler);
+        }
+
+        public void ExecuteCommand(
+            FormatSelectionCommandArgs args,
+            Action nextCommandHandler,
+            CommandExecutionContext executionContext)
+        {
+            Execute(args.TextView, args.SubjectBuffer, selectionOnly: true, nextCommandHandler);
+        }
+
+        private void Execute(
+            ITextView textView,
+            ITextBuffer subjectBuffer,
+            bool selectionOnly,
+            Action nextCommandHandler)
+        {
+            if (textView.TextBuffer != subjectBuffer)
+            {
+                nextCommandHandler();
+                return;
+            }
+
+            using (ITextUndoTransaction transaction =
+                _undoHistoryRegistry.GetHistory(subjectBuffer).CreateTransaction("Format and reflow"))
+            {
+                nextCommandHandler();
+                Reflow(textView, subjectBuffer, selectionOnly);
+                transaction.Complete();
+            }
+        }
+
+        private static void Reflow(ITextView textView, ITextBuffer subjectBuffer, bool selectionOnly)
+        {
+            int? maxLineLength = MaxLineLengthSettings.GetMaxLineLength(textView);
+            if (!maxLineLength.HasValue)
+            {
+                return;
+            }
+
+            ITextSnapshot snapshot = subjectBuffer.CurrentSnapshot;
+            TextSpan? scope = ReflowSelection.GetScope(textView, snapshot, selectionOnly);
+            if (selectionOnly && !scope.HasValue)
+            {
+                return;
+            }
+
+            string newLine = textView.Options.GetOptionValue<string>(DefaultOptions.NewLineCharacterOptionName);
+            string indentUnit = MaxLineLengthSettings.UseTabs(textView)
+                ? "\t"
+                : new string(' ', MaxLineLengthSettings.GetIndentSize(textView));
+
+            IReadOnlyList<TextChange> changes = CSharpListReflow.GetChanges(
+                snapshot.GetText(),
+                maxLineLength.Value,
+                scope,
+                newLine,
+                indentUnit,
+                MaxLineLengthSettings.GetIndentSize(textView));
+
+            ReflowSelection.ApplyChanges(subjectBuffer, changes);
+        }
+    }
+}

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+  <Metadata>
+    <Identity Id="MaxLineLength.bbc727b4-1dfb-4d9e-a159-032529f396ed" Version="1.0" Language="en-US" Publisher="Mads Kristensen" />
+    <DisplayName>Max Line Length</DisplayName>
+    <Description>Displays the effective .editorconfig line-length ruler and safely reflows plain text, Markdown paragraphs, C# lists, and supported code comments through Visual Studio's existing format commands.</Description>
+    <MoreInfo>https://github.com/madskristensen/MaxLineLength</MoreInfo>
+    <License>Resources\LICENSE.txt</License>
+    <Icon>Resources\Icon.png</Icon>
+    <PreviewImage>Resources\Icon.png</PreviewImage>
+    <Tags>editor;.editorconfig;line length;ruler;productivity</Tags>
+  </Metadata>
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,)">
+      <ProductArchitecture>arm64</ProductArchitecture>
+    </InstallationTarget>
+  </Installation>
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" DisplayName="Visual Studio core editor" Version="[17.0,)" />
+  </Prerequisites>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.VsPackage" Path="|%CurrentProject%;PkgdefProjectOutputGroup|" d:Source="Project" d:ProjectName="%CurrentProject%" />
+    <Asset Type="Microsoft.VisualStudio.MefComponent" Path="|%CurrentProject%|" d:Source="Project" d:ProjectName="%CurrentProject%" />
+  </Assets>
+</PackageManifest>
