@@ -7,7 +7,7 @@
 
 ----
 
-**See and apply your project's preferred line length directly in Visual Studio.** Max Line Length reads the effective `max_line_length` value from `.editorconfig`, displays a subtle ruler, and safely reflows supported content during **Format Document** and **Format Selection**.
+**See and apply your project's preferred line length directly in Visual Studio.** Max Line Length reads the effective `max_line_length` value from `.editorconfig`, displays a subtle ruler, and safely reflows supported content during **Format Document**, **Format Selection**, and Code Cleanup.
 
 > This extension was inspired by the Visual Studio Developer Community feature request [Support `max_line_length` in EditorConfig](https://developercommunity.visualstudio.com/t/Support-max_line_length-in-editorconfig/567214).
 
@@ -18,7 +18,7 @@
 | Need | What the extension provides |
 | ---- | --------------------------- |
 | Keep code readable | A clear visual boundary at the team's preferred line length |
-| Apply the convention | Reflow supported content through Visual Studio's existing format commands |
+| Apply the convention | Reflow supported content through Visual Studio's format and Code Cleanup commands |
 | Share conventions | Configuration through the repository's existing `.editorconfig` file |
 | Support mixed codebases | Per-file values resolved by Visual Studio from matching EditorConfig sections |
 | Stay out of the way | No custom commands, options pages, or background scans |
@@ -38,6 +38,8 @@ Change the value and save `.editorconfig` to update the convention. All open doc
 
 Run **Format Document** or **Format Selection** to apply the configured limit. Plain-text documents wrap at the last whitespace before the limit and preserve indentation.
 
+To use reflow with Code Cleanup, open **Configure Code Cleanup**, edit a profile, and enable **Reflow lines to configured maximum length**. The fixer is disabled by default so existing cleanup profiles do not change unexpectedly. Once enabled, it runs for document cleanup and cleanup on save. Project and solution cleanup are not supported.
+
 ![Reflow](art/reflow.gif)
 
 *Executing the Format Document (Ctrl+K+D) command, the code is being reflowed.*
@@ -50,6 +52,7 @@ Run **Format Document** or **Format Selection** to apply the configured limit. P
 - Stays hidden in diff views.
 - Uses the editor foreground color with reduced opacity so it fits light, dark, and high-contrast themes.
 - Groups built-in formatting and reflow into a single undo transaction.
+- Provides an opt-in Code Cleanup profile item for document cleanup and cleanup on save.
 - Restricts **Format Selection** reflow to complete selected lines or complete C# or Visual Basic syntax constructs.
 - Reflows C# lists, fluent invocation chains, logical and null-coalescing expressions, conditional expressions, LINQ query clauses, and line comments.
 - Reflows Visual Basic argument, parameter, type, initializer, and tuple lists plus line and documentation comments.

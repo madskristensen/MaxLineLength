@@ -1,11 +1,8 @@
-using System.Collections.Generic;
 using System.ComponentModel.Composition;
-using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.VisualStudio.Commanding;
 using Microsoft.VisualStudio.Text;
-using Microsoft.VisualStudio.Text.Classification;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.Text.Editor.Commanding.Commands;
 using Microsoft.VisualStudio.Text.Operations;
@@ -23,15 +20,15 @@ namespace MaxLineLength
         IChainedCommandHandler<FormatSelectionCommandArgs>
     {
         private readonly ITextUndoHistoryRegistry _undoHistoryRegistry;
-        private readonly IClassifierAggregatorService _classifierAggregatorService;
+        private readonly DocumentReflowService _reflowService;
 
         [ImportingConstructor]
         public TextReflowCommandHandler(
             ITextUndoHistoryRegistry undoHistoryRegistry,
-            IClassifierAggregatorService classifierAggregatorService)
+            DocumentReflowService reflowService)
         {
             _undoHistoryRegistry = undoHistoryRegistry;
-            _classifierAggregatorService = classifierAggregatorService;
+            _reflowService = reflowService;
         }
 
         public string DisplayName => "Max line length text reflow";
@@ -75,14 +72,8 @@ namespace MaxLineLength
             Action nextCommandHandler,
             CancellationToken cancellationToken)
         {
-            bool supportsCodeComments = SupportsCodeComments(subjectBuffer);
-            bool isMarkdown = subjectBuffer.ContentType.IsOfType("markdown");
-
             if (textView.TextBuffer != subjectBuffer ||
-                !ReflowContentTypes.IsSupported(
-                    subjectBuffer.ContentType.TypeName,
-                    supportsCodeComments,
-                    isMarkdown))
+                !_reflowService.CanReflowText(subjectBuffer.ContentType))
             {
                 nextCommandHandler();
                 return;
@@ -92,13 +83,7 @@ namespace MaxLineLength
                 _undoHistoryRegistry.GetHistory(subjectBuffer).CreateTransaction("Format and reflow"))
             {
                 nextCommandHandler();
-                Reflow(
-                    textView,
-                    subjectBuffer,
-                    selectionOnly,
-                    supportsCodeComments,
-                    isMarkdown,
-                    cancellationToken);
+                Reflow(textView, subjectBuffer, selectionOnly, cancellationToken);
                 transaction.Complete();
             }
         }
@@ -107,12 +92,10 @@ namespace MaxLineLength
             ITextView textView,
             ITextBuffer subjectBuffer,
             bool selectionOnly,
-            bool supportsCodeComments,
-            bool isMarkdown,
             CancellationToken cancellationToken)
         {
-            int? maxLineLength = MaxLineLengthSettings.GetMaxLineLength(textView);
-            if (!maxLineLength.HasValue)
+            ReflowOptions? options = ReflowOptions.FromView(textView);
+            if (options == null)
             {
                 return;
             }
@@ -124,66 +107,7 @@ namespace MaxLineLength
                 return;
             }
 
-            string newLine = textView.Options.GetOptionValue<string>(DefaultOptions.NewLineCharacterOptionName);
-            int tabSize = MaxLineLengthSettings.GetTabSize(textView);
-            IReadOnlyList<TextChange> changes;
-
-            if (supportsCodeComments)
-            {
-                IClassifier classifier = _classifierAggregatorService.GetClassifier(subjectBuffer);
-                var snapshotSpan = new SnapshotSpan(snapshot, 0, snapshot.Length);
-                IEnumerable<TextSpan> commentSpans = classifier
-                    .GetClassificationSpans(snapshotSpan)
-                    .Where(classification =>
-                        classification.ClassificationType.IsOfType("comment"))
-                    .Select(classification => new TextSpan(
-                        classification.Span.Start.Position,
-                        classification.Span.Length));
-
-                changes = CommentReflow.GetChanges(
-                    snapshot.GetText(),
-                    commentSpans,
-                    maxLineLength.Value,
-                    scope,
-                    newLine,
-                    tabSize,
-                    cancellationToken);
-            }
-            else if (isMarkdown)
-            {
-                changes = MarkdownReflow.GetChanges(
-                    snapshot.GetText(),
-                    maxLineLength.Value,
-                    scope,
-                    newLine,
-                    tabSize,
-                    cancellationToken);
-            }
-            else
-            {
-                changes = TextLineReflow.GetChanges(
-                    snapshot.GetText(),
-                    maxLineLength.Value,
-                    scope,
-                    newLine,
-                    tabSize,
-                    cancellationToken);
-            }
-
-            ReflowSelection.ApplyChanges(subjectBuffer, changes);
-        }
-
-        private static bool SupportsCodeComments(ITextBuffer subjectBuffer)
-        {
-            foreach (string contentType in ReflowContentTypes.CommentContentTypes)
-            {
-                if (subjectBuffer.ContentType.IsOfType(contentType))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            _reflowService.Reflow(subjectBuffer, options, scope, cancellationToken);
         }
     }
 }

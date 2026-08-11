@@ -22,10 +22,7 @@ namespace MaxLineLength
                 return resolvedMaxLineLength.Value;
             }
 
-            IReadOnlyDictionary<string, object>? conventions = GetConventions(view);
-            return TryGetPositiveInt(conventions, "max_line_length", MaximumColumn, out int value)
-                ? value
-                : null;
+            return GetMaxLineLength(GetConventions(view));
         }
 
         internal static void SetResolvedMaxLineLength(ITextView view, int? value)
@@ -36,12 +33,13 @@ namespace MaxLineLength
 
         internal static int? GetMaxLineLength(string filePath)
         {
-            FileConfiguration configuration = new EditorConfigParser().Parse(filePath);
-            return configuration.Properties.TryGetValue("max_line_length", out string value) &&
-                int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int parsedValue) &&
-                parsedValue > 0 &&
-                parsedValue <= MaximumColumn
-                ? parsedValue
+            return GetMaxLineLength(GetConventions(filePath));
+        }
+
+        internal static int? GetMaxLineLength(IReadOnlyDictionary<string, object>? conventions)
+        {
+            return TryGetPositiveInt(conventions, "max_line_length", MaximumColumn, out int value)
+                ? value
                 : null;
         }
 
@@ -81,7 +79,25 @@ namespace MaxLineLength
 
         public static bool UseTabs(ITextView view)
         {
-            return IsSetting(GetConventions(view), "indent_style", "tab");
+            return UseTabs(GetConventions(view));
+        }
+
+        internal static bool UseTabs(IReadOnlyDictionary<string, object>? conventions)
+        {
+            return IsSetting(conventions, "indent_style", "tab");
+        }
+
+        internal static IReadOnlyDictionary<string, object> GetConventions(string filePath)
+        {
+            FileConfiguration configuration = new EditorConfigParser().Parse(filePath);
+            var conventions = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (KeyValuePair<string, string> property in configuration.Properties)
+            {
+                conventions[property.Key] = property.Value;
+            }
+
+            return conventions;
         }
 
         private static IReadOnlyDictionary<string, object>? GetConventions(ITextView view)

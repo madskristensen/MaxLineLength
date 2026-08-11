@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Microsoft.VisualStudio.Utilities;
 
 namespace MaxLineLength
 {
@@ -37,6 +38,19 @@ namespace MaxLineLength
             foreach (string supportedType in _commentContentTypes)
             {
                 if (string.Equals(contentTypeName, supportedType, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public static bool SupportsCodeComments(IContentType contentType)
+        {
+            foreach (string supportedType in _commentContentTypes)
+            {
+                if (contentType.IsOfType(supportedType))
                 {
                     return true;
                 }

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Threading;
 using Microsoft.CodeAnalysis.Text;
@@ -21,11 +20,15 @@ namespace MaxLineLength
         IChainedCommandHandler<FormatSelectionCommandArgs>
     {
         private readonly ITextUndoHistoryRegistry _undoHistoryRegistry;
+        private readonly DocumentReflowService _reflowService;
 
         [ImportingConstructor]
-        public CSharpReflowCommandHandler(ITextUndoHistoryRegistry undoHistoryRegistry)
+        public CSharpReflowCommandHandler(
+            ITextUndoHistoryRegistry undoHistoryRegistry,
+            DocumentReflowService reflowService)
         {
             _undoHistoryRegistry = undoHistoryRegistry;
+            _reflowService = reflowService;
         }
 
         public string DisplayName => "Max line length reflow";
@@ -92,14 +95,14 @@ namespace MaxLineLength
             }
         }
 
-        private static void Reflow(
+        private void Reflow(
             ITextView textView,
             ITextBuffer subjectBuffer,
             bool selectionOnly,
             CancellationToken cancellationToken)
         {
-            int? maxLineLength = MaxLineLengthSettings.GetMaxLineLength(textView);
-            if (!maxLineLength.HasValue)
+            ReflowOptions? options = ReflowOptions.FromView(textView);
+            if (options == null)
             {
                 return;
             }
@@ -111,23 +114,7 @@ namespace MaxLineLength
                 return;
             }
 
-            string newLine = textView.Options.GetOptionValue<string>(DefaultOptions.NewLineCharacterOptionName);
-            int indentSize = MaxLineLengthSettings.GetIndentSize(textView);
-            int tabSize = MaxLineLengthSettings.GetTabSize(textView);
-            string indentUnit = MaxLineLengthSettings.UseTabs(textView)
-                ? "\t"
-                : new string(' ', indentSize);
-
-            IReadOnlyList<TextChange> changes = CSharpListReflow.GetChanges(
-                snapshot.GetText(),
-                maxLineLength.Value,
-                scope,
-                newLine,
-                indentUnit,
-                tabSize,
-                cancellationToken);
-
-            ReflowSelection.ApplyChanges(subjectBuffer, changes);
+            _reflowService.Reflow(subjectBuffer, options, scope, cancellationToken);
         }
     }
 }
