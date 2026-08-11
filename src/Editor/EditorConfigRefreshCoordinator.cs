@@ -14,6 +14,7 @@ namespace MaxLineLength
         private readonly object _gate = new();
         private readonly HashSet<MaxLineLengthAdornment> _adornments = new();
         private readonly HashSet<ITextDocument> _documents = new();
+        private bool _isDisposed;
 
         [ImportingConstructor]
         public EditorConfigRefreshCoordinator(ITextDocumentFactoryService documentFactory)
@@ -27,6 +28,11 @@ namespace MaxLineLength
         {
             lock (_gate)
             {
+                if (_isDisposed)
+                {
+                    return;
+                }
+
                 _adornments.Add(adornment);
             }
 
@@ -54,6 +60,7 @@ namespace MaxLineLength
             ITextDocument[] documents;
             lock (_gate)
             {
+                _isDisposed = true;
                 documents = _documents.ToArray();
                 _documents.Clear();
                 _adornments.Clear();
@@ -127,29 +134,29 @@ namespace MaxLineLength
 
         private void TrackDocument(ITextDocument document)
         {
-            bool added;
             lock (_gate)
             {
-                added = _documents.Add(document);
-            }
+                if (_isDisposed || _documents.Contains(document))
+                {
+                    return;
+                }
 
-            if (added)
-            {
                 document.FileActionOccurred += OnFileActionOccurred;
+                _documents.Add(document);
             }
         }
 
         private void UntrackDocument(ITextDocument document)
         {
-            bool removed;
             lock (_gate)
             {
-                removed = _documents.Remove(document);
-            }
+                if (!_documents.Contains(document))
+                {
+                    return;
+                }
 
-            if (removed)
-            {
                 document.FileActionOccurred -= OnFileActionOccurred;
+                _documents.Remove(document);
             }
         }
     }

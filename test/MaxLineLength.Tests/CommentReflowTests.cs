@@ -77,6 +77,23 @@ namespace MaxLineLength.Tests
             Assert.Equal(source, Reflow(source, new[] { commentSpan }, 30, selection));
         }
 
+        [Fact]
+        public void HonorsCancellationBeforeReflow()
+        {
+            const string source = "// A comment that would otherwise be wrapped";
+            var cancellationToken = new System.Threading.CancellationToken(canceled: true);
+
+            Assert.Throws<System.OperationCanceledException>(() =>
+                CommentReflow.GetChanges(
+                    source,
+                    new[] { new TextSpan(0, source.Length) },
+                    maxLineLength: 20,
+                    scope: null,
+                    "\r\n",
+                    tabSize: 4,
+                    cancellationToken));
+        }
+
         private static string Reflow(
             string source,
             TextSpan[] commentSpans,

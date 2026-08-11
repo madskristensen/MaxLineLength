@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using Microsoft.CodeAnalysis.Text;
 
 namespace MaxLineLength
@@ -10,22 +11,35 @@ namespace MaxLineLength
             int maxLineLength,
             TextSpan? scope,
             string newLine,
-            int tabSize)
+            int tabSize,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             SourceText sourceText = SourceText.From(text);
             var changes = new List<TextChange>();
 
             foreach (TextLine line in sourceText.Lines)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (line.Span.IsEmpty ||
-                    (scope.HasValue && !scope.Value.Contains(line.Span)) ||
-                    GetVisualLength(line.ToString(), tabSize) <= maxLineLength)
+                    (scope.HasValue && !scope.Value.Contains(line.Span)))
                 {
                     continue;
                 }
 
                 string original = line.ToString();
-                string replacement = WrapLine(original, maxLineLength, newLine, tabSize);
+                if (GetVisualLength(original, tabSize) <= maxLineLength)
+                {
+                    continue;
+                }
+
+                string replacement = WrapLine(
+                    original,
+                    maxLineLength,
+                    newLine,
+                    tabSize,
+                    cancellationToken);
                 if (!string.Equals(original, replacement, StringComparison.Ordinal))
                 {
                     changes.Add(new TextChange(line.Span, replacement));
@@ -35,7 +49,12 @@ namespace MaxLineLength
             return changes;
         }
 
-        internal static string WrapLine(string line, int maxLineLength, string newLine, int tabSize)
+        internal static string WrapLine(
+            string line,
+            int maxLineLength,
+            string newLine,
+            int tabSize,
+            CancellationToken cancellationToken = default)
         {
             string indentation = GetLeadingWhitespace(line);
             int indentationWidth = GetVisualLength(indentation, tabSize);
@@ -49,8 +68,11 @@ namespace MaxLineLength
                 isFirstLine ? 0 : indentationWidth,
                 maxLineLength,
                 tabSize,
+                cancellationToken,
                 out int breakIndex))
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (breakIndex <= contentStart ||
                     (isFirstLine && breakIndex < indentation.Length))
                 {
@@ -95,8 +117,10 @@ namespace MaxLineLength
         internal static IReadOnlyList<string> WrapWords(
             string text,
             int firstWidth,
-            int continuationWidth)
+            int continuationWidth,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var lines = new List<string>();
             string trimmed = text.Trim();
             int contentStart = 0;
@@ -104,7 +128,12 @@ namespace MaxLineLength
 
             while (trimmed.Length - contentStart > width && width > 0)
             {
-                int breakIndex = FindLastWhitespace(trimmed, contentStart, width);
+                cancellationToken.ThrowIfCancellationRequested();
+                int breakIndex = FindLastWhitespace(
+                    trimmed,
+                    contentStart,
+                    width,
+                    cancellationToken);
                 if (breakIndex <= contentStart)
                 {
                     break;
@@ -130,6 +159,7 @@ namespace MaxLineLength
             int initialColumn,
             int maxColumn,
             int tabSize,
+            CancellationToken cancellationToken,
             out int breakIndex)
         {
             int column = initialColumn;
@@ -137,6 +167,11 @@ namespace MaxLineLength
 
             for (int index = startIndex; index < text.Length && column <= maxColumn; index++)
             {
+                if ((index & 1023) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 char character = text[index];
                 if (char.IsWhiteSpace(character))
                 {
@@ -162,13 +197,22 @@ namespace MaxLineLength
             return line.Substring(0, length);
         }
 
-        private static int FindLastWhitespace(string text, int startIndex, int width)
+        private static int FindLastWhitespace(
+            string text,
+            int startIndex,
+            int width,
+            CancellationToken cancellationToken)
         {
             int lastWhitespace = -1;
             int limit = Math.Min(text.Length - 1, startIndex + width);
 
             for (int index = startIndex; index <= limit; index++)
             {
+                if ((index & 1023) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 if (char.IsWhiteSpace(text[index]))
                 {
                     lastWhitespace = index;

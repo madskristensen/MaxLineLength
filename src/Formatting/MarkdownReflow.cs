@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis.Text;
 
 namespace MaxLineLength
@@ -11,15 +12,19 @@ namespace MaxLineLength
             int maxLineLength,
             TextSpan? scope,
             string newLine,
-            int tabSize)
+            int tabSize,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             SourceText sourceText = SourceText.From(text);
-            bool[] excludedLines = GetExcludedLines(sourceText);
+            bool[] excludedLines = GetExcludedLines(sourceText, cancellationToken);
             var changes = new List<TextChange>();
             int lineNumber = 0;
 
             while (lineNumber < sourceText.Lines.Count)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (!IsParagraphLine(sourceText, lineNumber, excludedLines))
                 {
                     lineNumber++;
@@ -35,6 +40,7 @@ namespace MaxLineLength
                     TextLineReflow.GetLeadingWhitespace(
                         sourceText.Lines[lineNumber + 1].ToString()) == indentation)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     lineNumber++;
                 }
 
@@ -52,7 +58,8 @@ namespace MaxLineLength
                         indentation + paragraph,
                         maxLineLength,
                         newLine,
-                        tabSize);
+                        tabSize,
+                        cancellationToken);
                     string original = sourceText.ToString(paragraphSpan);
 
                     if (!string.Equals(original, replacement, StringComparison.Ordinal))
@@ -67,7 +74,9 @@ namespace MaxLineLength
             return changes.OrderByDescending(change => change.Span.Start).ToArray();
         }
 
-        private static bool[] GetExcludedLines(SourceText sourceText)
+        private static bool[] GetExcludedLines(
+            SourceText sourceText,
+            CancellationToken cancellationToken)
         {
             var excluded = new bool[sourceText.Lines.Count];
             bool inFence = false;
@@ -78,6 +87,7 @@ namespace MaxLineLength
 
             for (int index = 0; index < sourceText.Lines.Count; index++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string trimmed = sourceText.Lines[index].ToString().Trim();
 
                 if (inFrontMatter)

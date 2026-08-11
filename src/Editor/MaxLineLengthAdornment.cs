@@ -105,24 +105,24 @@ namespace MaxLineLength
 
         private async Task RefreshColumnFromFileAsync()
         {
-            try
+            while (true)
             {
-                while (true)
+                int refreshVersion;
+                string? filePath;
+                lock (_refreshGate)
                 {
-                    int refreshVersion;
-                    string? filePath;
-                    lock (_refreshGate)
+                    if (_isClosed)
                     {
-                        if (_isClosed)
-                        {
-                            _isRefreshRunning = false;
-                            return;
-                        }
-
-                        refreshVersion = _refreshVersion;
-                        filePath = _pendingFilePath;
+                        _isRefreshRunning = false;
+                        return;
                     }
 
+                    refreshVersion = _refreshVersion;
+                    filePath = _pendingFilePath;
+                }
+
+                try
+                {
                     int? column = await Task.Run(() =>
                         filePath != null && filePath.Length > 0
                             ? MaxLineLengthSettings.GetMaxLineLength(filePath)
@@ -145,20 +145,25 @@ namespace MaxLineLength
                         _column = filePath != null && filePath.Length > 0
                             ? column
                             : MaxLineLengthSettings.GetMaxLineLength(_view);
+                        MaxLineLengthSettings.SetResolvedMaxLineLength(_view, _column);
                         UpdateRuler();
                         _isRefreshRunning = false;
                         return;
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                lock (_refreshGate)
+                catch (Exception ex)
                 {
-                    _isRefreshRunning = false;
-                }
+                    await ex.LogAsync();
 
-                await ex.LogAsync();
+                    lock (_refreshGate)
+                    {
+                        if (_isClosed || refreshVersion == _refreshVersion)
+                        {
+                            _isRefreshRunning = false;
+                            return;
+                        }
+                    }
+                }
             }
         }
 

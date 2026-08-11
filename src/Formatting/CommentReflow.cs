@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis.Text;
 
 namespace MaxLineLength
@@ -12,16 +13,25 @@ namespace MaxLineLength
             int maxLineLength,
             TextSpan? scope,
             string newLine,
-            int tabSize)
+            int tabSize,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             SourceText sourceText = SourceText.From(text);
             var changes = new List<TextChange>();
 
-            foreach (TextSpan span in MergeSpans(commentSpans))
+            foreach (TextSpan span in MergeSpans(commentSpans, cancellationToken))
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (span.End > sourceText.Length ||
                     (scope.HasValue && !scope.Value.Contains(span)) ||
-                    !HasOverlengthLine(sourceText, span, maxLineLength, tabSize))
+                    !HasOverlengthLine(
+                        sourceText,
+                        span,
+                        maxLineLength,
+                        tabSize,
+                        cancellationToken))
                 {
                     continue;
                 }
@@ -36,14 +46,16 @@ namespace MaxLineLength
                         textBeforeComment,
                         maxLineLength,
                         newLine,
-                        tabSize)
+                        tabSize,
+                        cancellationToken)
                     : comment.StartsWith("/*", StringComparison.Ordinal)
                         ? WrapBlockComment(
                             comment,
                             textBeforeComment,
                             maxLineLength,
                             newLine,
-                            tabSize)
+                            tabSize,
+                            cancellationToken)
                         : comment;
 
                 if (!string.Equals(comment, replacement, StringComparison.Ordinal))
@@ -60,8 +72,10 @@ namespace MaxLineLength
             string textBeforeComment,
             int maxLineLength,
             string newLine,
-            int tabSize)
+            int tabSize,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             int markerLength = 0;
             while (markerLength < comment.Length && comment[markerLength] == '/')
             {
@@ -86,8 +100,11 @@ namespace MaxLineLength
                 TextLineReflow.GetVisualLength(textBeforeComment + marker, tabSize);
             int continuationWidth = maxLineLength -
                 TextLineReflow.GetVisualLength(leadingWhitespace + marker, tabSize);
-            IReadOnlyList<string> lines =
-                TextLineReflow.WrapWords(content, firstWidth, continuationWidth);
+            IReadOnlyList<string> lines = TextLineReflow.WrapWords(
+                content,
+                firstWidth,
+                continuationWidth,
+                cancellationToken);
 
             if (lines.Count < 2)
             {
@@ -104,21 +121,25 @@ namespace MaxLineLength
             string textBeforeComment,
             int maxLineLength,
             string newLine,
-            int tabSize)
+            int tabSize,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             SourceText commentText = SourceText.From(comment);
             var result = new List<string>(commentText.Lines.Count);
             bool changed = false;
 
             for (int lineNumber = 0; lineNumber < commentText.Lines.Count; lineNumber++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string line = commentText.Lines[lineNumber].ToString();
                 string replacement = WrapBlockCommentLine(
                     line,
                     lineNumber == 0 ? textBeforeComment : string.Empty,
                     maxLineLength,
                     newLine,
-                    tabSize);
+                    tabSize,
+                    cancellationToken);
 
                 changed |= !string.Equals(line, replacement, StringComparison.Ordinal);
                 result.Add(replacement);
@@ -132,8 +153,10 @@ namespace MaxLineLength
             string textBeforeLine,
             int maxLineLength,
             string newLine,
-            int tabSize)
+            int tabSize,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             int markerStart = 0;
             while (markerStart < line.Length && char.IsWhiteSpace(line[markerStart]))
             {
@@ -183,8 +206,11 @@ namespace MaxLineLength
                 TextLineReflow.GetVisualLength(textBeforeLine + prefix, tabSize);
             int continuationWidth = maxLineLength -
                 TextLineReflow.GetVisualLength(continuationPrefix, tabSize);
-            IReadOnlyList<string> wrapped =
-                TextLineReflow.WrapWords(content, firstWidth, continuationWidth);
+            IReadOnlyList<string> wrapped = TextLineReflow.WrapWords(
+                content,
+                firstWidth,
+                continuationWidth,
+                cancellationToken);
 
             if (wrapped.Count < 2)
             {
@@ -202,7 +228,8 @@ namespace MaxLineLength
             SourceText sourceText,
             TextSpan span,
             int maxLineLength,
-            int tabSize)
+            int tabSize,
+            CancellationToken cancellationToken)
         {
             int firstLine = sourceText.Lines.GetLineFromPosition(span.Start).LineNumber;
             int lastPosition = span.IsEmpty ? span.Start : span.End - 1;
@@ -210,6 +237,8 @@ namespace MaxLineLength
 
             for (int lineNumber = firstLine; lineNumber <= lastLine; lineNumber++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (TextLineReflow.GetVisualLength(
                     sourceText.Lines[lineNumber].ToString(),
                     tabSize) > maxLineLength)
@@ -221,12 +250,17 @@ namespace MaxLineLength
             return false;
         }
 
-        private static IEnumerable<TextSpan> MergeSpans(IEnumerable<TextSpan> spans)
+        private static IEnumerable<TextSpan> MergeSpans(
+            IEnumerable<TextSpan> spans,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             TextSpan? current = null;
 
             foreach (TextSpan span in spans.Where(span => !span.IsEmpty).OrderBy(span => span.Start))
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (!current.HasValue)
                 {
                     current = span;

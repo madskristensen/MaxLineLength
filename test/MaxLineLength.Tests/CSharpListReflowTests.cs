@@ -110,6 +110,51 @@ namespace MaxLineLength.Tests
                     cancellationToken));
         }
 
+        [Fact]
+        [Trait("Category", "Profiling")]
+        public void ProcessesRepresentativeFormattingWorkload()
+        {
+            const int itemCount = 500;
+            const string plainLine =
+                "This representative plain text line contains enough words to exceed the configured maximum line length.";
+            const string markdownParagraph =
+                "This representative Markdown paragraph contains enough words to exceed the configured maximum line length.\r\n" +
+                "It also includes an existing soft break that must be combined before wrapping.";
+            const string commentLine =
+                "// This representative code comment contains enough words to exceed the configured maximum line length.";
+
+            string plainText = string.Join("\r\n", Enumerable.Repeat(plainLine, itemCount));
+            string markdown = string.Join("\r\n\r\n", Enumerable.Repeat(markdownParagraph, itemCount));
+            string csharp = "class ProfileTarget\r\n{\r\n" + string.Join(
+                "\r\n",
+                Enumerable.Range(0, itemCount).Select(index =>
+                    $"    void Method{index}() {{ Call(firstArgument, secondArgument, thirdArgument, fourthArgument); }}")) +
+                "\r\n}";
+            string comments = string.Join("\r\n", Enumerable.Repeat(commentLine, itemCount));
+            TextSpan[] commentSpans = Enumerable.Range(0, itemCount)
+                .Select(index => new TextSpan(
+                    index * (commentLine.Length + 2),
+                    commentLine.Length))
+                .ToArray();
+
+            Assert.NotEmpty(TextLineReflow.GetChanges(plainText, 80, null, "\r\n", 4));
+            Assert.NotEmpty(MarkdownReflow.GetChanges(markdown, 80, null, "\r\n", 4));
+            Assert.NotEmpty(CommentReflow.GetChanges(
+                comments,
+                commentSpans,
+                80,
+                null,
+                "\r\n",
+                4));
+            Assert.NotEmpty(CSharpListReflow.GetChanges(
+                csharp,
+                80,
+                null,
+                "\r\n",
+                "    ",
+                4));
+        }
+
         private static string Reflow(string source, int maxLineLength, TextSpan? scope = null)
         {
             var changes = CSharpListReflow.GetChanges(

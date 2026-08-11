@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.VisualStudio.Commanding;
 using Microsoft.VisualStudio.Text;
@@ -46,7 +47,12 @@ namespace MaxLineLength
             Action nextCommandHandler,
             CommandExecutionContext executionContext)
         {
-            Execute(args.TextView, args.SubjectBuffer, selectionOnly: false, nextCommandHandler);
+            Execute(
+                args.TextView,
+                args.SubjectBuffer,
+                selectionOnly: false,
+                nextCommandHandler,
+                executionContext.OperationContext.UserCancellationToken);
         }
 
         public void ExecuteCommand(
@@ -54,14 +60,20 @@ namespace MaxLineLength
             Action nextCommandHandler,
             CommandExecutionContext executionContext)
         {
-            Execute(args.TextView, args.SubjectBuffer, selectionOnly: true, nextCommandHandler);
+            Execute(
+                args.TextView,
+                args.SubjectBuffer,
+                selectionOnly: true,
+                nextCommandHandler,
+                executionContext.OperationContext.UserCancellationToken);
         }
 
         private void Execute(
             ITextView textView,
             ITextBuffer subjectBuffer,
             bool selectionOnly,
-            Action nextCommandHandler)
+            Action nextCommandHandler,
+            CancellationToken cancellationToken)
         {
             bool supportsCodeComments = SupportsCodeComments(subjectBuffer);
             bool isMarkdown = subjectBuffer.ContentType.IsOfType("markdown");
@@ -80,7 +92,13 @@ namespace MaxLineLength
                 _undoHistoryRegistry.GetHistory(subjectBuffer).CreateTransaction("Format and reflow"))
             {
                 nextCommandHandler();
-                Reflow(textView, subjectBuffer, selectionOnly, supportsCodeComments, isMarkdown);
+                Reflow(
+                    textView,
+                    subjectBuffer,
+                    selectionOnly,
+                    supportsCodeComments,
+                    isMarkdown,
+                    cancellationToken);
                 transaction.Complete();
             }
         }
@@ -90,7 +108,8 @@ namespace MaxLineLength
             ITextBuffer subjectBuffer,
             bool selectionOnly,
             bool supportsCodeComments,
-            bool isMarkdown)
+            bool isMarkdown,
+            CancellationToken cancellationToken)
         {
             int? maxLineLength = MaxLineLengthSettings.GetMaxLineLength(textView);
             if (!maxLineLength.HasValue)
@@ -127,7 +146,8 @@ namespace MaxLineLength
                     maxLineLength.Value,
                     scope,
                     newLine,
-                    tabSize);
+                    tabSize,
+                    cancellationToken);
             }
             else if (isMarkdown)
             {
@@ -136,7 +156,8 @@ namespace MaxLineLength
                     maxLineLength.Value,
                     scope,
                     newLine,
-                    tabSize);
+                    tabSize,
+                    cancellationToken);
             }
             else
             {
@@ -145,7 +166,8 @@ namespace MaxLineLength
                     maxLineLength.Value,
                     scope,
                     newLine,
-                    tabSize);
+                    tabSize,
+                    cancellationToken);
             }
 
             ReflowSelection.ApplyChanges(subjectBuffer, changes);

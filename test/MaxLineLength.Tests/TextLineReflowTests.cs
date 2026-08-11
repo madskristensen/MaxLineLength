@@ -56,6 +56,21 @@ namespace MaxLineLength.Tests
                 line => Assert.True(TextLineReflow.GetVisualLength(line, 4) <= 40));
         }
 
+        [Fact]
+        public void HonorsCancellationBeforeReflow()
+        {
+            var cancellationToken = new System.Threading.CancellationToken(canceled: true);
+
+            Assert.Throws<System.OperationCanceledException>(() =>
+                TextLineReflow.GetChanges(
+                    "one two three four five",
+                    maxLineLength: 10,
+                    scope: null,
+                    "\r\n",
+                    tabSize: 4,
+                    cancellationToken));
+        }
+
         private static string Reflow(string source, int maxLineLength, TextSpan? scope = null)
         {
             var changes = TextLineReflow.GetChanges(source, maxLineLength, scope, "\r\n", tabSize: 4);

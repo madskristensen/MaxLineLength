@@ -63,6 +63,21 @@ namespace MaxLineLength.Tests
             Assert.Equal(source, Reflow(source, 30, selection));
         }
 
+        [Fact]
+        public void HonorsCancellationBeforeReflow()
+        {
+            var cancellationToken = new System.Threading.CancellationToken(canceled: true);
+
+            Assert.Throws<System.OperationCanceledException>(() =>
+                MarkdownReflow.GetChanges(
+                    "A paragraph that would otherwise be wrapped.",
+                    maxLineLength: 20,
+                    scope: null,
+                    "\r\n",
+                    tabSize: 4,
+                    cancellationToken));
+        }
+
         private static string Reflow(
             string source,
             int maxLineLength,

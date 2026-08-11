@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using EditorConfig.Core;
 using Microsoft.VisualStudio.Text.Editor;
 
@@ -14,10 +15,23 @@ namespace MaxLineLength
 
         public static int? GetMaxLineLength(ITextView view)
         {
+            if (ResolvedMaxLineLengthCache.Values.TryGetValue(
+                view,
+                out ResolvedMaxLineLength resolvedMaxLineLength))
+            {
+                return resolvedMaxLineLength.Value;
+            }
+
             IReadOnlyDictionary<string, object>? conventions = GetConventions(view);
             return TryGetPositiveInt(conventions, "max_line_length", MaximumColumn, out int value)
                 ? value
                 : null;
+        }
+
+        internal static void SetResolvedMaxLineLength(ITextView view, int? value)
+        {
+            ResolvedMaxLineLengthCache.Values.Remove(view);
+            ResolvedMaxLineLengthCache.Values.Add(view, new ResolvedMaxLineLength(value));
         }
 
         internal static int? GetMaxLineLength(string filePath)
@@ -112,6 +126,21 @@ namespace MaxLineLength
 
             value = 0;
             return false;
+        }
+
+        private static class ResolvedMaxLineLengthCache
+        {
+            public static readonly ConditionalWeakTable<ITextView, ResolvedMaxLineLength> Values = new();
+        }
+
+        private sealed class ResolvedMaxLineLength
+        {
+            public ResolvedMaxLineLength(int? value)
+            {
+                Value = value;
+            }
+
+            public int? Value { get; }
         }
     }
 }

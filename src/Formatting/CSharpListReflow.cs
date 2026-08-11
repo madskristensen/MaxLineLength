@@ -58,17 +58,8 @@ namespace MaxLineLength
                         continue;
                     }
 
-                    SyntaxToken nextToken = comma.GetNextToken(includeZeroWidth: true);
-                    if (nextToken.RawKind == 0 ||
-                        sourceText.Lines.GetLineFromPosition(comma.Span.End).LineNumber !=
-                        sourceText.Lines.GetLineFromPosition(nextToken.SpanStart).LineNumber)
-                    {
-                        continue;
-                    }
-
-                    TextSpan whitespaceSpan = TextSpan.FromBounds(comma.Span.End, nextToken.SpanStart);
-                    string whitespace = sourceText.ToString(whitespaceSpan);
-                    if (ContainsNonWhitespace(whitespace))
+                    TextSpan whitespaceSpan = TextSpan.FromBounds(comma.Span.End, comma.FullSpan.End);
+                    if (ContainsLineBreakOrNonWhitespace(sourceText, whitespaceSpan))
                     {
                         continue;
                     }
@@ -77,9 +68,12 @@ namespace MaxLineLength
                 }
             }
 
-            TextChange[] syntaxChanges = changes.Values
-                .OrderBy(change => change.Span.Start)
-                .ToArray();
+            if (text.IndexOf("//", StringComparison.Ordinal) < 0)
+            {
+                return changes.Values.OrderByDescending(change => change.Span.Start).ToArray();
+            }
+
+            TextChange[] syntaxChanges = changes.Values.OrderBy(change => change.Span.Start).ToArray();
 
             foreach (SyntaxTrivia trivia in root.DescendantTrivia(descendIntoTrivia: true))
             {
@@ -193,11 +187,12 @@ namespace MaxLineLength
             return overlengthLineCounts[lastLine + 1] > overlengthLineCounts[firstLine];
         }
 
-        private static bool ContainsNonWhitespace(string text)
+        private static bool ContainsLineBreakOrNonWhitespace(SourceText sourceText, TextSpan span)
         {
-            foreach (char character in text)
+            for (int position = span.Start; position < span.End; position++)
             {
-                if (!char.IsWhiteSpace(character))
+                char character = sourceText[position];
+                if (character == '\r' || character == '\n' || !char.IsWhiteSpace(character))
                 {
                     return true;
                 }

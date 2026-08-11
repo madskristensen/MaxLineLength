@@ -55,6 +55,10 @@ Run **Format Document** or **Format Selection** to apply the configured limit. P
 - Reflows ordinary Markdown paragraphs but leaves front matter, headings, lists, block quotes, tables, fenced or indented code, inline code, HTML, and hard line breaks unchanged.
 - Does not intercept mouse or keyboard input.
 
+## Profiling
+
+The `ProcessesRepresentativeFormattingWorkload` test exercises the plain-text, Markdown, classified-comment, and C# reflow engines with representative document sizes. Filter on `Category=Profiling` when targeting this workload with a CPU or allocation profiler. It isolates the formatting algorithms; profile an experimental Visual Studio instance to measure editor, command-routing, and adornment overhead.
+
 ## Get involved
 
 Found a bug or have an idea? Open an issue or pull request on the [GitHub repository][repo].
