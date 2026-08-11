@@ -82,6 +82,34 @@ namespace MaxLineLength.Tests
             Assert.Equal(source, Reflow(source, 30));
         }
 
+        [Fact]
+        public void ReflowsNestedArgumentLists()
+        {
+            const string source = "class C { void M() { Outer(Inner(firstArgument, secondArgument, thirdArgument), fourthArgument, fifthArgument); } }";
+
+            string actual = Reflow(source, 55);
+
+            Assert.Contains("Inner(firstArgument,\r\n    secondArgument,\r\n    thirdArgument)", actual);
+            Assert.Contains("fourthArgument,\r\n    fifthArgument", actual);
+        }
+
+        [Fact]
+        public void HonorsCancellationBeforeParsing()
+        {
+            const string source = "class C { void M() { Call(firstArgument, secondArgument, thirdArgument); } }";
+            var cancellationToken = new System.Threading.CancellationToken(canceled: true);
+
+            Assert.Throws<System.OperationCanceledException>(() =>
+                CSharpListReflow.GetChanges(
+                    source,
+                    maxLineLength: 40,
+                    scope: null,
+                    "\r\n",
+                    "    ",
+                    tabSize: 4,
+                    cancellationToken));
+        }
+
         private static string Reflow(string source, int maxLineLength, TextSpan? scope = null)
         {
             var changes = CSharpListReflow.GetChanges(

@@ -52,6 +52,7 @@
     <PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.551" ExcludeAssets="Runtime">
       <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="editorconfig" Version="0.15.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.0.1" ExcludeAssets="Runtime" />
     <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.9.820">
       <PrivateAssets>all</PrivateAssets>

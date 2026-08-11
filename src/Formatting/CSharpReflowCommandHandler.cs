@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
+using System.Threading;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.VisualStudio.Commanding;
 using Microsoft.VisualStudio.Text;
@@ -48,7 +49,12 @@ namespace MaxLineLength
             Action nextCommandHandler,
             CommandExecutionContext executionContext)
         {
-            Execute(args.TextView, args.SubjectBuffer, selectionOnly: false, nextCommandHandler);
+            Execute(
+                args.TextView,
+                args.SubjectBuffer,
+                selectionOnly: false,
+                nextCommandHandler,
+                executionContext.OperationContext.UserCancellationToken);
         }
 
         public void ExecuteCommand(
@@ -56,14 +62,20 @@ namespace MaxLineLength
             Action nextCommandHandler,
             CommandExecutionContext executionContext)
         {
-            Execute(args.TextView, args.SubjectBuffer, selectionOnly: true, nextCommandHandler);
+            Execute(
+                args.TextView,
+                args.SubjectBuffer,
+                selectionOnly: true,
+                nextCommandHandler,
+                executionContext.OperationContext.UserCancellationToken);
         }
 
         private void Execute(
             ITextView textView,
             ITextBuffer subjectBuffer,
             bool selectionOnly,
-            Action nextCommandHandler)
+            Action nextCommandHandler,
+            CancellationToken cancellationToken)
         {
             if (textView.TextBuffer != subjectBuffer)
             {
@@ -75,12 +87,16 @@ namespace MaxLineLength
                 _undoHistoryRegistry.GetHistory(subjectBuffer).CreateTransaction("Format and reflow"))
             {
                 nextCommandHandler();
-                Reflow(textView, subjectBuffer, selectionOnly);
+                Reflow(textView, subjectBuffer, selectionOnly, cancellationToken);
                 transaction.Complete();
             }
         }
 
-        private static void Reflow(ITextView textView, ITextBuffer subjectBuffer, bool selectionOnly)
+        private static void Reflow(
+            ITextView textView,
+            ITextBuffer subjectBuffer,
+            bool selectionOnly,
+            CancellationToken cancellationToken)
         {
             int? maxLineLength = MaxLineLengthSettings.GetMaxLineLength(textView);
             if (!maxLineLength.HasValue)
@@ -96,9 +112,11 @@ namespace MaxLineLength
             }
 
             string newLine = textView.Options.GetOptionValue<string>(DefaultOptions.NewLineCharacterOptionName);
+            int indentSize = MaxLineLengthSettings.GetIndentSize(textView);
+            int tabSize = MaxLineLengthSettings.GetTabSize(textView);
             string indentUnit = MaxLineLengthSettings.UseTabs(textView)
                 ? "\t"
-                : new string(' ', MaxLineLengthSettings.GetIndentSize(textView));
+                : new string(' ', indentSize);
 
             IReadOnlyList<TextChange> changes = CSharpListReflow.GetChanges(
                 snapshot.GetText(),
@@ -106,7 +124,8 @@ namespace MaxLineLength
                 scope,
                 newLine,
                 indentUnit,
-                MaxLineLengthSettings.GetIndentSize(textView));
+                tabSize,
+                cancellationToken);
 
             ReflowSelection.ApplyChanges(subjectBuffer, changes);
         }

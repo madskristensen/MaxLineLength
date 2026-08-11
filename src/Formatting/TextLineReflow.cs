@@ -38,19 +38,35 @@ namespace MaxLineLength
         internal static string WrapLine(string line, int maxLineLength, string newLine, int tabSize)
         {
             string indentation = GetLeadingWhitespace(line);
-            string remaining = line;
+            int indentationWidth = GetVisualLength(indentation, tabSize);
+            int contentStart = 0;
+            bool isFirstLine = true;
             var result = new List<string>();
 
-            while (GetVisualLength(remaining, tabSize) > maxLineLength)
+            while (TryFindWrapBreak(
+                line,
+                contentStart,
+                isFirstLine ? 0 : indentationWidth,
+                maxLineLength,
+                tabSize,
+                out int breakIndex))
             {
-                int breakIndex = FindLastWhitespaceAtOrBeforeColumn(remaining, maxLineLength, tabSize);
-                if (breakIndex < indentation.Length || breakIndex <= 0)
+                if (breakIndex <= contentStart ||
+                    (isFirstLine && breakIndex < indentation.Length))
                 {
                     break;
                 }
 
-                result.Add(remaining.Substring(0, breakIndex).TrimEnd());
-                remaining = indentation + remaining.Substring(breakIndex).TrimStart();
+                string segment = line.Substring(contentStart, breakIndex - contentStart).TrimEnd();
+                result.Add(isFirstLine ? segment : indentation + segment);
+
+                contentStart = breakIndex;
+                while (contentStart < line.Length && char.IsWhiteSpace(line[contentStart]))
+                {
+                    contentStart++;
+                }
+
+                isFirstLine = false;
             }
 
             if (result.Count == 0)
@@ -58,7 +74,8 @@ namespace MaxLineLength
                 return line;
             }
 
-            result.Add(remaining);
+            string remainder = line.Substring(contentStart);
+            result.Add(isFirstLine ? remainder : indentation + remainder);
             return string.Join(newLine, result);
         }
 
@@ -81,37 +98,49 @@ namespace MaxLineLength
             int continuationWidth)
         {
             var lines = new List<string>();
-            string remaining = text.Trim();
+            string trimmed = text.Trim();
+            int contentStart = 0;
             int width = firstWidth;
 
-            while (remaining.Length > width && width > 0)
+            while (trimmed.Length - contentStart > width && width > 0)
             {
-                int breakIndex = FindLastWhitespace(remaining, width);
-                if (breakIndex <= 0)
+                int breakIndex = FindLastWhitespace(trimmed, contentStart, width);
+                if (breakIndex <= contentStart)
                 {
                     break;
                 }
 
-                lines.Add(remaining.Substring(0, breakIndex).TrimEnd());
-                remaining = remaining.Substring(breakIndex).TrimStart();
+                lines.Add(trimmed.Substring(contentStart, breakIndex - contentStart).TrimEnd());
+                contentStart = breakIndex;
+                while (contentStart < trimmed.Length && char.IsWhiteSpace(trimmed[contentStart]))
+                {
+                    contentStart++;
+                }
+
                 width = continuationWidth;
             }
 
-            lines.Add(remaining);
+            lines.Add(trimmed.Substring(contentStart));
             return lines;
         }
 
-        private static int FindLastWhitespaceAtOrBeforeColumn(string text, int maxColumn, int tabSize)
+        private static bool TryFindWrapBreak(
+            string text,
+            int startIndex,
+            int initialColumn,
+            int maxColumn,
+            int tabSize,
+            out int breakIndex)
         {
-            int column = 0;
-            int lastWhitespace = -1;
+            int column = initialColumn;
+            breakIndex = -1;
 
-            for (int index = 0; index < text.Length && column <= maxColumn; index++)
+            for (int index = startIndex; index < text.Length && column <= maxColumn; index++)
             {
                 char character = text[index];
                 if (char.IsWhiteSpace(character))
                 {
-                    lastWhitespace = index;
+                    breakIndex = index;
                 }
 
                 column = character == '\t'
@@ -119,7 +148,7 @@ namespace MaxLineLength
                     : column + 1;
             }
 
-            return lastWhitespace;
+            return column > maxColumn;
         }
 
         internal static string GetLeadingWhitespace(string line)
@@ -133,12 +162,12 @@ namespace MaxLineLength
             return line.Substring(0, length);
         }
 
-        private static int FindLastWhitespace(string text, int width)
+        private static int FindLastWhitespace(string text, int startIndex, int width)
         {
             int lastWhitespace = -1;
-            int limit = Math.Min(text.Length - 1, width);
+            int limit = Math.Min(text.Length - 1, startIndex + width);
 
-            for (int index = 0; index <= limit; index++)
+            for (int index = startIndex; index <= limit; index++)
             {
                 if (char.IsWhiteSpace(text[index]))
                 {

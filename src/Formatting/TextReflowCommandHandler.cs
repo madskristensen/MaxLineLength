@@ -67,9 +67,10 @@ namespace MaxLineLength
             bool isMarkdown = subjectBuffer.ContentType.IsOfType("markdown");
 
             if (textView.TextBuffer != subjectBuffer ||
-                (subjectBuffer.ContentType.IsOfType("code") &&
-                 !supportsCodeComments &&
-                 !isMarkdown))
+                !ReflowContentTypes.IsSupported(
+                    subjectBuffer.ContentType.TypeName,
+                    supportsCodeComments,
+                    isMarkdown))
             {
                 nextCommandHandler();
                 return;
@@ -105,7 +106,7 @@ namespace MaxLineLength
             }
 
             string newLine = textView.Options.GetOptionValue<string>(DefaultOptions.NewLineCharacterOptionName);
-            int tabSize = MaxLineLengthSettings.GetIndentSize(textView);
+            int tabSize = MaxLineLengthSettings.GetTabSize(textView);
             IReadOnlyList<TextChange> changes;
 
             if (supportsCodeComments)

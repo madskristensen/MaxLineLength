@@ -43,6 +43,19 @@ namespace MaxLineLength.Tests
             Assert.Equal(source, Reflow(source, 10, scope));
         }
 
+        [Fact]
+        public void WrapsVeryLongLineWithoutDroppingContent()
+        {
+            string source = string.Join(" ", Enumerable.Repeat("word", 20000));
+
+            string actual = Reflow(source, 40);
+
+            Assert.Equal(source, actual.Replace("\r\n", " "));
+            Assert.All(
+                actual.Split(new[] { "\r\n" }, System.StringSplitOptions.None),
+                line => Assert.True(TextLineReflow.GetVisualLength(line, 4) <= 40));
+        }
+
         private static string Reflow(string source, int maxLineLength, TextSpan? scope = null)
         {
             var changes = TextLineReflow.GetChanges(source, maxLineLength, scope, "\r\n", tabSize: 4);

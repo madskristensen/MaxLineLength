@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -15,26 +16,48 @@ namespace MaxLineLength
             TextSpan? scope,
             string newLine,
             string indentUnit,
-            int tabSize)
+            int tabSize,
+            CancellationToken cancellationToken = default)
         {
-            SyntaxTree tree = CSharpSyntaxTree.ParseText(text);
-            SyntaxNode root = tree.GetRoot();
-            SourceText sourceText = tree.GetText();
+            cancellationToken.ThrowIfCancellationRequested();
+            SourceText sourceText = SourceText.From(text);
+            int[] overlengthLineCounts = GetOverlengthLineCounts(
+                sourceText,
+                maxLineLength,
+                tabSize,
+                cancellationToken);
+            if (overlengthLineCounts[overlengthLineCounts.Length - 1] == 0)
+            {
+                return Array.Empty<TextChange>();
+            }
+
+            SyntaxTree tree = CSharpSyntaxTree.ParseText(
+                sourceText,
+                cancellationToken: cancellationToken);
+            SyntaxNode root = tree.GetRoot(cancellationToken);
             var changes = new Dictionary<int, TextChange>();
 
-            foreach (SyntaxNode node in root.DescendantNodes().Where(IsSupportedList))
+            foreach (SyntaxNode node in root.DescendantNodes())
             {
-                if (node.ContainsDiagnostics ||
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!IsSupportedList(node) ||
+                    node.ContainsDiagnostics ||
                     (scope.HasValue && !scope.Value.Contains(node.Span)) ||
-                    !HasOverlengthLine(node, sourceText, maxLineLength, tabSize))
+                    !HasOverlengthLine(node, sourceText, overlengthLineCounts))
                 {
                     continue;
                 }
 
                 string indentation = GetLeadingWhitespace(sourceText, node.SpanStart) + indentUnit;
 
-                foreach (SyntaxToken comma in node.ChildTokens().Where(token => token.IsKind(SyntaxKind.CommaToken)))
+                foreach (SyntaxToken comma in node.ChildTokens())
                 {
+                    if (!comma.IsKind(SyntaxKind.CommaToken))
+                    {
+                        continue;
+                    }
+
                     SyntaxToken nextToken = comma.GetNextToken(includeZeroWidth: true);
                     if (nextToken.RawKind == 0 ||
                         sourceText.Lines.GetLineFromPosition(comma.Span.End).LineNumber !=
@@ -45,7 +68,7 @@ namespace MaxLineLength
 
                     TextSpan whitespaceSpan = TextSpan.FromBounds(comma.Span.End, nextToken.SpanStart);
                     string whitespace = sourceText.ToString(whitespaceSpan);
-                    if (whitespace.Any(character => !char.IsWhiteSpace(character)))
+                    if (ContainsNonWhitespace(whitespace))
                     {
                         continue;
                     }
@@ -54,28 +77,37 @@ namespace MaxLineLength
                 }
             }
 
-            foreach (SyntaxTrivia trivia in root.DescendantTrivia(descendIntoTrivia: true).Where(IsSingleLineComment))
+            TextChange[] syntaxChanges = changes.Values
+                .OrderBy(change => change.Span.Start)
+                .ToArray();
+
+            foreach (SyntaxTrivia trivia in root.DescendantTrivia(descendIntoTrivia: true))
             {
-                if ((scope.HasValue && !scope.Value.Contains(trivia.Span)) ||
-                    changes.Values.Any(change => change.Span.OverlapsWith(trivia.Span)))
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!IsSingleLineComment(trivia) ||
+                    (scope.HasValue && !scope.Value.Contains(trivia.Span)) ||
+                    OverlapsAny(syntaxChanges, trivia.Span))
                 {
                     continue;
                 }
 
                 TextLine line = sourceText.Lines.GetLineFromPosition(trivia.SpanStart);
-                if (TextLineReflow.GetVisualLength(line.ToString(), tabSize) <= maxLineLength)
+                if (overlengthLineCounts[line.LineNumber + 1] ==
+                    overlengthLineCounts[line.LineNumber])
                 {
                     continue;
                 }
 
+                string original = trivia.ToFullString();
                 string replacement = WrapSingleLineComment(
-                    trivia.ToFullString(),
+                    original,
                     sourceText.ToString(TextSpan.FromBounds(line.Start, trivia.SpanStart)),
                     maxLineLength,
                     newLine,
                     tabSize);
 
-                if (!string.Equals(replacement, trivia.ToFullString(), StringComparison.Ordinal))
+                if (!string.Equals(replacement, original, StringComparison.Ordinal))
                 {
                     changes[trivia.SpanStart] = new TextChange(trivia.Span, replacement);
                 }
@@ -127,25 +159,73 @@ namespace MaxLineLength
                 node is PropertyPatternClauseSyntax;
         }
 
+        private static int[] GetOverlengthLineCounts(
+            SourceText sourceText,
+            int maxLineLength,
+            int tabSize,
+            CancellationToken cancellationToken)
+        {
+            var counts = new int[sourceText.Lines.Count + 1];
+
+            for (int lineNumber = 0; lineNumber < sourceText.Lines.Count; lineNumber++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                counts[lineNumber + 1] = counts[lineNumber] +
+                    (TextLineReflow.GetVisualLength(
+                        sourceText.Lines[lineNumber].ToString(),
+                        tabSize) > maxLineLength
+                        ? 1
+                        : 0);
+            }
+
+            return counts;
+        }
+
         private static bool HasOverlengthLine(
             SyntaxNode node,
             SourceText sourceText,
-            int maxLineLength,
-            int tabSize)
+            int[] overlengthLineCounts)
         {
             int firstLine = sourceText.Lines.GetLineFromPosition(node.SpanStart).LineNumber;
             int lastPosition = node.Span.End > node.SpanStart ? node.Span.End - 1 : node.SpanStart;
             int lastLine = sourceText.Lines.GetLineFromPosition(lastPosition).LineNumber;
 
-            for (int lineNumber = firstLine; lineNumber <= lastLine; lineNumber++)
+            return overlengthLineCounts[lastLine + 1] > overlengthLineCounts[firstLine];
+        }
+
+        private static bool ContainsNonWhitespace(string text)
+        {
+            foreach (char character in text)
             {
-                if (TextLineReflow.GetVisualLength(sourceText.Lines[lineNumber].ToString(), tabSize) > maxLineLength)
+                if (!char.IsWhiteSpace(character))
                 {
                     return true;
                 }
             }
 
             return false;
+        }
+
+        private static bool OverlapsAny(TextChange[] changes, TextSpan span)
+        {
+            int low = 0;
+            int high = changes.Length;
+
+            while (low < high)
+            {
+                int middle = low + ((high - low) / 2);
+                if (changes[middle].Span.Start < span.Start)
+                {
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+
+            return (low < changes.Length && changes[low].Span.OverlapsWith(span)) ||
+                (low > 0 && changes[low - 1].Span.OverlapsWith(span));
         }
 
         private static string GetLeadingWhitespace(SourceText sourceText, int position)
