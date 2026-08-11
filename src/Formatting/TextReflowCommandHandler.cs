@@ -175,9 +175,15 @@ namespace MaxLineLength
 
         private static bool SupportsCodeComments(ITextBuffer subjectBuffer)
         {
-            return subjectBuffer.ContentType.IsOfType("JavaScript") ||
-                subjectBuffer.ContentType.IsOfType("TypeScript") ||
-                subjectBuffer.ContentType.IsOfType("C/C++");
+            foreach (string contentType in ReflowContentTypes.CommentContentTypes)
+            {
+                if (subjectBuffer.ContentType.IsOfType(contentType))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

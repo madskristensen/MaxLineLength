@@ -44,15 +44,17 @@ Run **Format Document** or **Format Selection** to apply the configured limit. P
 
 ## Behavior
 
-- Works with plain text, Markdown, C#, JavaScript, TypeScript, and C++ editors and uses the effective setting for each file.
+- Works with plain text, Markdown, C#, Visual Basic, F#, JavaScript, TypeScript, C++, CSS, LESS, SCSS, and SQL editors and uses the effective setting for each file.
 - Honors `indent_size`, `indent_style`, and `tab_width` when calculating visual columns.
 - Follows editor scrolling, zoom, font, and viewport changes.
 - Stays hidden in diff views.
 - Uses the editor foreground color with reduced opacity so it fits light, dark, and high-contrast themes.
 - Groups built-in formatting and reflow into a single undo transaction.
-- Restricts **Format Selection** reflow to complete selected lines or complete C# syntax constructs.
-- Leaves C# string and character literals unchanged because inserting raw newlines would produce invalid or semantically different code.
-- Reflows only comments in JavaScript, TypeScript, and C++; expressions remain unchanged because automatic semicolon insertion, templates, preprocessors, and raw strings require language-specific transformations.
+- Restricts **Format Selection** reflow to complete selected lines or complete C# or Visual Basic syntax constructs.
+- Reflows C# lists, fluent invocation chains, logical and null-coalescing expressions, conditional expressions, LINQ query clauses, and line comments.
+- Reflows Visual Basic argument, parameter, type, initializer, and tuple lists plus line and documentation comments.
+- Leaves C# and Visual Basic string and character literals unchanged because inserting raw newlines would produce invalid or semantically different code.
+- Reflows classified comments only in F#, JavaScript, TypeScript, C++, CSS, LESS, SCSS, and SQL; executable expressions remain unchanged.
 - Reflows ordinary Markdown paragraphs but leaves front matter, headings, lists, block quotes, tables, fenced or indented code, inline code, HTML, and hard line breaks unchanged.
 - Does not intercept mouse or keyboard input.
 

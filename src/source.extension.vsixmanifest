@@ -3,7 +3,7 @@
   <Metadata>
     <Identity Id="MaxLineLength.bbc727b4-1dfb-4d9e-a159-032529f396ed" Version="1.0" Language="en-US" Publisher="Mads Kristensen" />
     <DisplayName>Max Line Length</DisplayName>
-    <Description>Displays the effective .editorconfig line-length ruler and safely reflows plain text, Markdown paragraphs, C# lists, and supported code comments through Visual Studio's existing format commands.</Description>
+    <Description>Displays the effective .editorconfig line-length ruler and safely reflows supported C#, Visual Basic, prose, and code comments through Visual Studio's format commands.</Description>
     <MoreInfo>https://github.com/madskristensen/MaxLineLength</MoreInfo>
     <License>Resources\LICENSE.txt</License>
     <Icon>Resources\Icon.png</Icon>

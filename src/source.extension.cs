@@ -10,7 +10,7 @@ namespace MaxLineLength
     {
         public const string Id = "MaxLineLength.bbc727b4-1dfb-4d9e-a159-032529f396ed";
         public const string Name = "Max Line Length";
-        public const string Description = @"Displays the effective .editorconfig line-length ruler and safely reflows plain text, Markdown paragraphs, C# lists, and supported code comments through Visual Studio's existing format commands.";
+        public const string Description = @"Displays the effective .editorconfig line-length ruler and safely reflows supported C#, Visual Basic, prose, and code comments through Visual Studio's format commands.";
         public const string Language = "en-US";
         public const string Version = "1.0";
         public const string Author = "Mads Kristensen";

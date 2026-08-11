@@ -67,6 +67,48 @@ namespace MaxLineLength.Tests
         }
 
         [Fact]
+        public void LeavesFSharpBlockCommentUnchanged()
+        {
+            const string source =
+                "    (* This F sharp block comment exceeds the configured maximum line length but may contain nested comments *)";
+            var commentSpan = new TextSpan(source.IndexOf("(*"), source.Length - source.IndexOf("(*"));
+
+            Assert.Equal(source, Reflow(source, new[] { commentSpan }, 42));
+        }
+
+        [Fact]
+        public void WrapsSqlLineComment()
+        {
+            const string source =
+                "    -- This SQL comment should wrap at the configured maximum line length";
+            var commentSpan = new TextSpan(source.IndexOf("--"), source.Length - source.IndexOf("--"));
+
+            string actual = Reflow(source, new[] { commentSpan }, 40);
+
+            Assert.Equal(
+                "    -- This SQL comment should wrap at\r\n" +
+                "    -- the configured maximum line\r\n" +
+                "    -- length",
+                actual);
+        }
+
+        [Fact]
+        public void WrapsVisualBasicLineComment()
+        {
+            const string source =
+                "    ' This Visual Basic comment should wrap at the configured maximum line length";
+            var commentSpan = new TextSpan(source.IndexOf("'"), source.Length - source.IndexOf("'"));
+
+            string actual = Reflow(source, new[] { commentSpan }, 42);
+
+            Assert.Equal(
+                "    ' This Visual Basic comment should\r\n" +
+                "    ' wrap at the configured maximum line\r\n" +
+                "    ' length",
+                actual);
+        }
+
+        [Fact]
         public void RequiresWholeCommentInsideSelection()
         {
             const string source =

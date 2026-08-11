@@ -40,7 +40,7 @@ namespace MaxLineLength
                 TextLine firstLine = sourceText.Lines.GetLineFromPosition(span.Start);
                 string textBeforeComment = sourceText.ToString(
                     TextSpan.FromBounds(firstLine.Start, span.Start));
-                string replacement = comment.StartsWith("//", StringComparison.Ordinal)
+                string replacement = IsLineComment(comment)
                     ? WrapSingleLineComment(
                         comment,
                         textBeforeComment,
@@ -76,13 +76,8 @@ namespace MaxLineLength
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            int markerLength = 0;
-            while (markerLength < comment.Length && comment[markerLength] == '/')
-            {
-                markerLength++;
-            }
-
-            if (markerLength < 2)
+            int markerLength = GetLineCommentMarkerLength(comment);
+            if (markerLength == 0)
             {
                 return comment;
             }
@@ -114,6 +109,43 @@ namespace MaxLineLength
             return marker + lines[0] +
                 string.Concat(lines.Skip(1).Select(
                     line => newLine + leadingWhitespace + marker + line));
+        }
+
+        private static bool IsLineComment(string comment)
+        {
+            return GetLineCommentMarkerLength(comment) > 0;
+        }
+
+        private static int GetLineCommentMarkerLength(string comment)
+        {
+            if (comment.StartsWith("//", StringComparison.Ordinal))
+            {
+                int length = 2;
+                while (length < comment.Length && comment[length] == '/')
+                {
+                    length++;
+                }
+
+                return length;
+            }
+
+            if (comment.StartsWith("--", StringComparison.Ordinal))
+            {
+                return 2;
+            }
+
+            if (comment.StartsWith("'", StringComparison.Ordinal))
+            {
+                int length = 1;
+                while (length < comment.Length && comment[length] == '\'')
+                {
+                    length++;
+                }
+
+                return length;
+            }
+
+            return 0;
         }
 
         private static string WrapBlockComment(

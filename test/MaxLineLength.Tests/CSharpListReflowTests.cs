@@ -1,4 +1,7 @@
+using System;
 using System.Linq;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 using Xunit;
 
@@ -75,6 +78,19 @@ namespace MaxLineLength.Tests
         }
 
         [Fact]
+        public void PreservesDocumentationCommentMarker()
+        {
+            const string source =
+                "    /// This C sharp documentation comment should wrap before the configured maximum line length";
+
+            string actual = Reflow(source, 45);
+
+            Assert.StartsWith(
+                "    /// This C sharp documentation comment\r\n    /// should wrap",
+                actual);
+        }
+
+        [Fact]
         public void LeavesStringLiteralUnchanged()
         {
             const string source = "class C { string Value = \"this ordinary string literal contains spaces but cannot accept raw newlines\"; }";
@@ -91,6 +107,131 @@ namespace MaxLineLength.Tests
 
             Assert.Contains("Inner(firstArgument,\r\n    secondArgument,\r\n    thirdArgument)", actual);
             Assert.Contains("fourthArgument,\r\n    fifthArgument", actual);
+        }
+
+        [Fact]
+        public void ReflowsFluentInvocationChain()
+        {
+            const string source =
+                "class C { void M() { var result = services.AddAuthentication().AddAuthorization().AddPolicyHandler(); } }";
+
+            string actual = Reflow(source, 60);
+
+            Assert.Contains(
+                "services\r\n    .AddAuthentication()\r\n    .AddAuthorization()\r\n    .AddPolicyHandler()",
+                actual);
+        }
+
+        [Fact]
+        public void IndentsFluentChainInsideReflowedArgumentList()
+        {
+            const string source =
+                "class C { void M() { Call(firstArgument, services.AddAuthentication().AddAuthorization().AddPolicyHandler(), thirdArgument); } }";
+
+            string actual = Reflow(source, 65);
+
+            Assert.Contains(
+                "firstArgument,\r\n    services\r\n        .AddAuthentication()\r\n        .AddAuthorization()\r\n        .AddPolicyHandler()",
+                actual);
+        }
+
+        [Fact]
+        public void PreservesTriviaInsideFluentChain()
+        {
+            const string source =
+                "class C { void M() { var result = services.AddAuthentication() /* keep */ .AddAuthorization().AddPolicyHandler(); } }";
+
+            string actual = Reflow(source, 65);
+
+            Assert.Contains("AddAuthentication() /* keep */ .AddAuthorization()", actual);
+            AssertValidSyntax(actual);
+        }
+
+        [Fact]
+        public void RequiresFluentChainToBeInsideSelection()
+        {
+            const string source =
+                "class C { void M() { var result = services.AddAuthentication().AddAuthorization().AddPolicyHandler(); } }";
+            var partialSelection = new TextSpan(
+                source.IndexOf("AddAuthorization", StringComparison.Ordinal),
+                "AddAuthorization".Length);
+
+            Assert.Equal(source, Reflow(source, 60, partialSelection));
+        }
+
+        [Fact]
+        public void ReflowsLogicalExpression()
+        {
+            const string source =
+                "class C { bool M() { return firstCondition && secondCondition && thirdCondition; } }";
+
+            string actual = Reflow(source, 55);
+
+            Assert.Contains(
+                "firstCondition\r\n    && secondCondition\r\n    && thirdCondition",
+                actual);
+        }
+
+        [Fact]
+        public void ReflowsConditionalExpression()
+        {
+            const string source =
+                "class C { string M() { return condition ? GetSuccessfulValue() : GetFallbackValue(); } }";
+
+            string actual = Reflow(source, 55);
+
+            Assert.Contains(
+                "condition\r\n    ? GetSuccessfulValue()\r\n    : GetFallbackValue()",
+                actual);
+        }
+
+        [Fact]
+        public void ReflowsQueryExpression()
+        {
+            const string source =
+                "class C { object M() { var result = from customer in customers where customer.IsActive orderby customer.Name select customer; return result; } }";
+
+            string actual = Reflow(source, 70);
+
+            Assert.Contains(
+                "var result =\r\n    from customer in customers\r\n    where customer.IsActive\r\n    orderby customer.Name\r\n    select customer",
+                actual);
+        }
+
+        [Fact]
+        public void ReflowsQueryContinuation()
+        {
+            const string source =
+                "class C { object M() { var result = from customer in customers group customer by customer.Region into region select region; return result; } }";
+
+            string actual = Reflow(source, 70);
+
+            Assert.Contains(
+                "from customer in customers\r\n    group customer by customer.Region\r\n    into region\r\n    select region",
+                actual);
+        }
+
+        [Theory]
+        [InlineData("class C { object M() { return services.AddAuthentication().AddAuthorization().AddPolicyHandler(); } }", 60)]
+        [InlineData("class C { bool M() { return firstCondition && secondCondition && thirdCondition; } }", 55)]
+        [InlineData("class C { string M() { return condition ? GetSuccessfulValue() : GetFallbackValue(); } }", 55)]
+        [InlineData("class C { object M() { return from customer in customers where customer.IsActive select customer; } }", 60)]
+        public void ProducesValidIdempotentExpressionReflow(string source, int maxLineLength)
+        {
+            string actual = Reflow(source, maxLineLength);
+
+            Assert.NotEqual(source, actual);
+            AssertValidSyntax(actual);
+            Assert.Equal(actual, Reflow(actual, maxLineLength));
+        }
+
+        [Fact]
+        public void LeavesSingleMemberAccessUnchanged()
+        {
+            const string source =
+                "class C { string M() { return customer.ExceptionallyLongPropertyNameThatExceedsTheLimit; } }";
+
+            Assert.Equal(source, Reflow(source, 50));
         }
 
         [Fact]
@@ -153,6 +294,15 @@ namespace MaxLineLength.Tests
                 "\r\n",
                 "    ",
                 4));
+        }
+
+        private static void AssertValidSyntax(string source)
+        {
+            var errors = CSharpSyntaxTree.ParseText(source)
+                .GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+
+            Assert.Empty(errors);
         }
 
         private static string Reflow(string source, int maxLineLength, TextSpan? scope = null)

@@ -68,6 +68,16 @@ namespace MaxLineLength
                 }
             }
 
+            AddExpressionChanges(
+                root,
+                sourceText,
+                overlengthLineCounts,
+                scope,
+                newLine,
+                indentUnit,
+                changes,
+                cancellationToken);
+
             if (text.IndexOf("//", StringComparison.Ordinal) < 0)
             {
                 return changes.Values.OrderByDescending(change => change.Span.Start).ToArray();
@@ -75,39 +85,275 @@ namespace MaxLineLength
 
             TextChange[] syntaxChanges = changes.Values.OrderBy(change => change.Span.Start).ToArray();
 
-            foreach (SyntaxTrivia trivia in root.DescendantTrivia(descendIntoTrivia: true))
+            foreach (SyntaxTrivia trivia in root.DescendantTrivia(descendIntoTrivia: false))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                TextSpan commentSpan = trivia.FullSpan;
 
                 if (!IsSingleLineComment(trivia) ||
-                    (scope.HasValue && !scope.Value.Contains(trivia.Span)) ||
-                    OverlapsAny(syntaxChanges, trivia.Span))
+                    (scope.HasValue && !scope.Value.Contains(commentSpan)) ||
+                    OverlapsAny(syntaxChanges, commentSpan))
                 {
                     continue;
                 }
 
-                TextLine line = sourceText.Lines.GetLineFromPosition(trivia.SpanStart);
+                TextLine line = sourceText.Lines.GetLineFromPosition(commentSpan.Start);
                 if (overlengthLineCounts[line.LineNumber + 1] ==
                     overlengthLineCounts[line.LineNumber])
                 {
                     continue;
                 }
 
-                string original = trivia.ToFullString();
+                string original = sourceText.ToString(commentSpan);
                 string replacement = WrapSingleLineComment(
                     original,
-                    sourceText.ToString(TextSpan.FromBounds(line.Start, trivia.SpanStart)),
+                    sourceText.ToString(TextSpan.FromBounds(line.Start, commentSpan.Start)),
                     maxLineLength,
                     newLine,
                     tabSize);
 
                 if (!string.Equals(replacement, original, StringComparison.Ordinal))
                 {
-                    changes[trivia.SpanStart] = new TextChange(trivia.Span, replacement);
+                    changes[commentSpan.Start] = new TextChange(commentSpan, replacement);
                 }
             }
 
             return changes.Values.OrderByDescending(change => change.Span.Start).ToArray();
+        }
+
+        private static void AddExpressionChanges(
+            SyntaxNode root,
+            SourceText sourceText,
+            int[] overlengthLineCounts,
+            TextSpan? scope,
+            string newLine,
+            string indentUnit,
+            IDictionary<int, TextChange> changes,
+            CancellationToken cancellationToken)
+        {
+            foreach (SyntaxNode node in root.DescendantNodes())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (node.ContainsDiagnostics ||
+                    (scope.HasValue && !scope.Value.Contains(node.Span)) ||
+                    !HasOverlengthLine(node, sourceText, overlengthLineCounts))
+                {
+                    continue;
+                }
+
+                string indentation = GetExpressionIndentation(
+                    node,
+                    sourceText,
+                    overlengthLineCounts,
+                    scope,
+                    indentUnit);
+
+                if (node is InvocationExpressionSyntax invocation &&
+                    !IsFluentContinuation(invocation.Parent))
+                {
+                    var operators = new List<SyntaxToken>();
+                    CollectFluentOperators(invocation, operators);
+                    if (operators.Count > 1)
+                    {
+                        AddBreaksBeforeTokens(
+                            operators,
+                            indentation,
+                            sourceText,
+                            newLine,
+                            changes);
+                    }
+                }
+                else if (node is BinaryExpressionSyntax binary &&
+                    IsBreakableBinary(binary) &&
+                    !(binary.Parent is BinaryExpressionSyntax parentBinary &&
+                        IsBreakableBinary(parentBinary)))
+                {
+                    var operators = new List<SyntaxToken>();
+                    CollectBinaryOperators(binary, operators);
+                    AddBreaksBeforeTokens(
+                        operators,
+                        indentation,
+                        sourceText,
+                        newLine,
+                        changes);
+                }
+                else if (node is ConditionalExpressionSyntax conditional &&
+                    !(conditional.Parent is ConditionalExpressionSyntax))
+                {
+                    AddBreaksBeforeTokens(
+                        new[] { conditional.QuestionToken, conditional.ColonToken },
+                        indentation,
+                        sourceText,
+                        newLine,
+                        changes);
+                }
+                else if (node is QueryExpressionSyntax query)
+                {
+                    AddBreaksBeforeTokens(
+                        GetQueryClauseTokens(query),
+                        indentation,
+                        sourceText,
+                        newLine,
+                        changes);
+                }
+            }
+        }
+
+        private static bool IsFluentContinuation(SyntaxNode? node)
+        {
+            return node is MemberAccessExpressionSyntax ||
+                (node is InvocationExpressionSyntax invocation &&
+                    invocation.Expression is MemberAccessExpressionSyntax);
+        }
+
+        private static void CollectFluentOperators(
+            ExpressionSyntax expression,
+            ICollection<SyntaxToken> operators)
+        {
+            ExpressionSyntax current = expression;
+            while (true)
+            {
+                if (current is InvocationExpressionSyntax invocation)
+                {
+                    current = invocation.Expression;
+                }
+                else if (current is MemberAccessExpressionSyntax memberAccess)
+                {
+                    operators.Add(memberAccess.OperatorToken);
+                    current = memberAccess.Expression;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (operators is List<SyntaxToken> list)
+            {
+                list.Reverse();
+            }
+        }
+
+        private static bool IsBreakableBinary(BinaryExpressionSyntax binary)
+        {
+            return binary.IsKind(SyntaxKind.LogicalAndExpression) ||
+                binary.IsKind(SyntaxKind.LogicalOrExpression) ||
+                binary.IsKind(SyntaxKind.CoalesceExpression);
+        }
+
+        private static void CollectBinaryOperators(
+            ExpressionSyntax expression,
+            ICollection<SyntaxToken> operators)
+        {
+            var pending = new Stack<SyntaxNodeOrToken>();
+            pending.Push(expression);
+
+            while (pending.Count > 0)
+            {
+                SyntaxNodeOrToken item = pending.Pop();
+                if (item.IsToken)
+                {
+                    operators.Add(item.AsToken());
+                }
+                else if (item.AsNode() is BinaryExpressionSyntax binary &&
+                    IsBreakableBinary(binary))
+                {
+                    pending.Push(binary.Right);
+                    pending.Push(binary.OperatorToken);
+                    pending.Push(binary.Left);
+                }
+            }
+        }
+
+        private static IEnumerable<SyntaxToken> GetQueryClauseTokens(QueryExpressionSyntax query)
+        {
+            yield return query.FromClause.FromKeyword;
+            QueryBodySyntax body = query.Body;
+
+            while (true)
+            {
+                foreach (QueryClauseSyntax clause in body.Clauses)
+                {
+                    yield return clause.GetFirstToken();
+                }
+
+                yield return body.SelectOrGroup.GetFirstToken();
+                if (body.Continuation == null)
+                {
+                    yield break;
+                }
+
+                yield return body.Continuation.IntoKeyword;
+                body = body.Continuation.Body;
+            }
+        }
+
+        private static string GetExpressionIndentation(
+            SyntaxNode node,
+            SourceText sourceText,
+            int[] overlengthLineCounts,
+            TextSpan? scope,
+            string indentUnit)
+        {
+            string indentation = GetLeadingWhitespace(sourceText, node.SpanStart) + indentUnit;
+
+            foreach (SyntaxNode ancestor in node.Ancestors())
+            {
+                if (IsSupportedList(ancestor) &&
+                    (!scope.HasValue || scope.Value.Contains(ancestor.Span)) &&
+                    HasOverlengthLine(ancestor, sourceText, overlengthLineCounts) &&
+                    HasPrecedingCommaBreak(ancestor, node.SpanStart, sourceText))
+                {
+                    indentation += indentUnit;
+                }
+            }
+
+            return indentation;
+        }
+
+        private static bool HasPrecedingCommaBreak(
+            SyntaxNode list,
+            int position,
+            SourceText sourceText)
+        {
+            foreach (SyntaxToken comma in list.ChildTokens())
+            {
+                if (!comma.IsKind(SyntaxKind.CommaToken) || comma.Span.End >= position)
+                {
+                    continue;
+                }
+
+                TextSpan whitespaceSpan = TextSpan.FromBounds(comma.Span.End, comma.FullSpan.End);
+                if (!ContainsLineBreakOrNonWhitespace(sourceText, whitespaceSpan))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void AddBreaksBeforeTokens(
+            IEnumerable<SyntaxToken> tokens,
+            string indentation,
+            SourceText sourceText,
+            string newLine,
+            IDictionary<int, TextChange> changes)
+        {
+            foreach (SyntaxToken token in tokens)
+            {
+                SyntaxToken previous = token.GetPreviousToken();
+                TextSpan whitespaceSpan = TextSpan.FromBounds(previous.Span.End, token.SpanStart);
+                if (ContainsLineBreakOrNonWhitespace(sourceText, whitespaceSpan))
+                {
+                    continue;
+                }
+
+                changes[whitespaceSpan.Start] = new TextChange(
+                    whitespaceSpan,
+                    newLine + indentation);
+            }
         }
 
         private static bool IsSingleLineComment(SyntaxTrivia trivia)
