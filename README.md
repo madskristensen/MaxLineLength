@@ -9,6 +9,8 @@
 
 **See and apply your project's preferred line length directly in Visual Studio.** Max Line Length reads the effective `max_line_length` value from `.editorconfig`, displays a subtle ruler, and safely reflows supported content during **Format Document** and **Format Selection**.
 
+This extension was inspired by the Visual Studio Developer Community feature request [Support `max_line_length` in EditorConfig](https://developercommunity.visualstudio.com/t/Support-max_line_length-in-editorconfig/567214).
+
 <!-- Screenshot: A C# document with the vertical ruler visible at the configured maximum line length. -->
 
 ## Why Max Line Length
