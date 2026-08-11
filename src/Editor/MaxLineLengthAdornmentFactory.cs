@@ -1,5 +1,6 @@
 using System.ComponentModel.Composition;
 using Microsoft.VisualStudio.Text;
+using Microsoft.VisualStudio.Text.Differencing;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.Utilities;
 
@@ -32,6 +33,11 @@ namespace MaxLineLength
 
         public void TextViewCreated(IWpfTextView textView)
         {
+            if (textView.Roles.Contains(DifferenceViewerRoles.DiffTextViewRole))
+            {
+                return;
+            }
+
             ITextDocument? document = _documentFactory.TryGetTextDocument(
                 textView.TextBuffer,
                 out ITextDocument textDocument)

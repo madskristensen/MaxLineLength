@@ -47,6 +47,7 @@ Run **Format Document** or **Format Selection** to apply the configured limit. P
 - Works with plain text, Markdown, C#, JavaScript, TypeScript, and C++ editors and uses the effective setting for each file.
 - Honors `indent_size`, `indent_style`, and `tab_width` when calculating visual columns.
 - Follows editor scrolling, zoom, font, and viewport changes.
+- Stays hidden in diff views.
 - Uses the editor foreground color with reduced opacity so it fits light, dark, and high-contrast themes.
 - Groups built-in formatting and reflow into a single undo transaction.
 - Restricts **Format Selection** reflow to complete selected lines or complete C# syntax constructs.
