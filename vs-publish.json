@@ -6,6 +6,16 @@
     "internalName": "MaxLineLength",
     "tags": [ "editorconfig", "line length", "ruler", "formatting" ]
   },
+  "assetFiles": [
+    {
+      "pathOnDisk": "art/vertical-line.png",
+      "targetPath": "art/vertical-line.png"
+    },
+    {
+      "pathOnDisk": "art/reflow.gif",
+      "targetPath": "art/reflow.gif"
+    }
+  ],
   "overview": "README.md",
   "publisher": "MadsKristensen",
   "repo": "https://github.com/madskristensen/MaxLineLength"
