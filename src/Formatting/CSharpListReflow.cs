@@ -35,6 +35,10 @@ namespace MaxLineLength
                 sourceText,
                 cancellationToken: cancellationToken);
             SyntaxNode root = tree.GetRoot(cancellationToken);
+            SyntaxTrivia[] trivia = root.DescendantTrivia(descendIntoTrivia: false).ToArray();
+            IReadOnlyList<TextSpan> suppressedSpans = ReflowSuppression.GetSpans(
+                sourceText,
+                trivia.Select(item => item.FullSpan));
             var changes = new Dictionary<int, TextChange>();
 
             foreach (SyntaxNode node in root.DescendantNodes())
@@ -44,6 +48,7 @@ namespace MaxLineLength
                 if (!IsSupportedList(node) ||
                     node.ContainsDiagnostics ||
                     (scope.HasValue && !scope.Value.Contains(node.Span)) ||
+                    ReflowSuppression.OverlapsAny(suppressedSpans, node.FullSpan) ||
                     !HasOverlengthLine(node, sourceText, overlengthLineCounts))
                 {
                     continue;
@@ -75,23 +80,20 @@ namespace MaxLineLength
                 scope,
                 newLine,
                 indentUnit,
+                suppressedSpans,
                 changes,
                 cancellationToken);
 
-            if (text.IndexOf("//", StringComparison.Ordinal) < 0)
-            {
-                return changes.Values.OrderByDescending(change => change.Span.Start).ToArray();
-            }
-
             TextChange[] syntaxChanges = changes.Values.OrderBy(change => change.Span.Start).ToArray();
 
-            foreach (SyntaxTrivia trivia in root.DescendantTrivia(descendIntoTrivia: false))
+            foreach (SyntaxTrivia item in trivia)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                TextSpan commentSpan = trivia.FullSpan;
+                TextSpan commentSpan = item.FullSpan;
 
-                if (!IsSingleLineComment(trivia) ||
+                if (!item.IsKind(SyntaxKind.SingleLineCommentTrivia) ||
                     (scope.HasValue && !scope.Value.Contains(commentSpan)) ||
+                    ReflowSuppression.OverlapsAny(suppressedSpans, commentSpan) ||
                     OverlapsAny(syntaxChanges, commentSpan))
                 {
                     continue;
@@ -118,6 +120,22 @@ namespace MaxLineLength
                 }
             }
 
+            foreach (TextChange change in DocumentationCommentReflow.GetChanges(
+                text,
+                trivia.Where(IsDocumentationComment).Select(item => item.FullSpan),
+                maxLineLength,
+                scope,
+                newLine,
+                tabSize,
+                suppressedSpans,
+                cancellationToken))
+            {
+                if (!OverlapsAny(syntaxChanges, change.Span))
+                {
+                    changes[change.Span.Start] = change;
+                }
+            }
+
             return changes.Values.OrderByDescending(change => change.Span.Start).ToArray();
         }
 
@@ -128,6 +146,7 @@ namespace MaxLineLength
             TextSpan? scope,
             string newLine,
             string indentUnit,
+            IReadOnlyList<TextSpan> suppressedSpans,
             IDictionary<int, TextChange> changes,
             CancellationToken cancellationToken)
         {
@@ -137,6 +156,7 @@ namespace MaxLineLength
 
                 if (node.ContainsDiagnostics ||
                     (scope.HasValue && !scope.Value.Contains(node.Span)) ||
+                    ReflowSuppression.OverlapsAny(suppressedSpans, node.FullSpan) ||
                     !HasOverlengthLine(node, sourceText, overlengthLineCounts))
                 {
                     continue;
@@ -356,10 +376,10 @@ namespace MaxLineLength
             }
         }
 
-        private static bool IsSingleLineComment(SyntaxTrivia trivia)
+        private static bool IsDocumentationComment(SyntaxTrivia trivia)
         {
-            return trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) ||
-                trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia);
+            return trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia) ||
+                trivia.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia);
         }
 
         private static string WrapSingleLineComment(

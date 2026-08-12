@@ -17,7 +17,8 @@ namespace MaxLineLength
         {
             cancellationToken.ThrowIfCancellationRequested();
             SourceText sourceText = SourceText.From(text);
-            bool[] excludedLines = GetExcludedLines(sourceText, cancellationToken);
+            IReadOnlyList<TextSpan> suppressedSpans = ReflowSuppression.GetSpans(sourceText);
+            bool[] excludedLines = GetExcludedLines(sourceText, suppressedSpans, cancellationToken);
             var changes = new List<TextChange>();
             int lineNumber = 0;
 
@@ -76,6 +77,7 @@ namespace MaxLineLength
 
         private static bool[] GetExcludedLines(
             SourceText sourceText,
+            IReadOnlyList<TextSpan> suppressedSpans,
             CancellationToken cancellationToken)
         {
             var excluded = new bool[sourceText.Lines.Count];
@@ -88,7 +90,14 @@ namespace MaxLineLength
             for (int index = 0; index < sourceText.Lines.Count; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string trimmed = sourceText.Lines[index].ToString().Trim();
+                TextLine line = sourceText.Lines[index];
+                string trimmed = line.ToString().Trim();
+
+                if (ReflowSuppression.OverlapsAny(suppressedSpans, line.SpanIncludingLineBreak))
+                {
+                    excluded[index] = true;
+                    continue;
+                }
 
                 if (inFrontMatter)
                 {

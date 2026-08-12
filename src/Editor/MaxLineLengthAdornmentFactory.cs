@@ -1,5 +1,6 @@
 using System.ComponentModel.Composition;
 using Microsoft.VisualStudio.Text;
+using Microsoft.VisualStudio.Text.Classification;
 using Microsoft.VisualStudio.Text.Differencing;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.Utilities;
@@ -14,14 +15,17 @@ namespace MaxLineLength
         internal const string LayerName = "MaxLineLengthAdornment";
 
         private readonly ITextDocumentFactoryService _documentFactory;
+        private readonly IEditorFormatMapService _formatMapService;
         private readonly EditorConfigRefreshCoordinator _refreshCoordinator;
 
         [ImportingConstructor]
         public MaxLineLengthAdornmentFactory(
             ITextDocumentFactoryService documentFactory,
+            IEditorFormatMapService formatMapService,
             EditorConfigRefreshCoordinator refreshCoordinator)
         {
             _documentFactory = documentFactory;
+            _formatMapService = formatMapService;
             _refreshCoordinator = refreshCoordinator;
         }
 
@@ -47,6 +51,7 @@ namespace MaxLineLength
             var adornment = new MaxLineLengthAdornment(
                 textView,
                 document,
+                _formatMapService.GetEditorFormatMap(textView),
                 _refreshCoordinator);
             _refreshCoordinator.Register(adornment, document);
         }

@@ -1,5 +1,7 @@
+using System.Windows.Media;
 using System.Windows.Shapes;
 using Microsoft.VisualStudio.Text;
+using Microsoft.VisualStudio.Text.Classification;
 using Microsoft.VisualStudio.Text.Editor;
 
 namespace MaxLineLength
@@ -8,6 +10,7 @@ namespace MaxLineLength
     {
         private readonly IWpfTextView _view;
         private readonly IAdornmentLayer _layer;
+        private readonly IEditorFormatMap _formatMap;
         private readonly Line _ruler;
         private readonly ITextDocument? _document;
         private readonly EditorConfigRefreshCoordinator _refreshCoordinator;
@@ -23,23 +26,25 @@ namespace MaxLineLength
         public MaxLineLengthAdornment(
             IWpfTextView view,
             ITextDocument? document,
+            IEditorFormatMap formatMap,
             EditorConfigRefreshCoordinator refreshCoordinator)
         {
             _view = view;
             _document = document;
+            _formatMap = formatMap;
             _refreshCoordinator = refreshCoordinator;
             _threadHelper = ToolkitThreadHelper.Create();
             _layer = view.GetAdornmentLayer(MaxLineLengthAdornmentFactory.LayerName);
             _ruler = new Line
             {
                 IsHitTestVisible = false,
-                Opacity = 0.35,
                 SnapsToDevicePixels = true,
                 StrokeThickness = 1,
             };
 
             _view.LayoutChanged += OnLayoutChanged;
             _view.Closed += OnViewClosed;
+            _formatMap.FormatMappingChanged += OnFormatMappingChanged;
 
             RefreshColumn();
             UpdateRuler();
@@ -54,6 +59,14 @@ namespace MaxLineLength
             catch (Exception ex)
             {
                 ex.Log();
+            }
+        }
+
+        private void OnFormatMappingChanged(object sender, FormatItemsEventArgs e)
+        {
+            if (e.ChangedItems.Contains(MaxLineLengthRulerFormatDefinition.FormatName))
+            {
+                UpdateRuler();
             }
         }
 
@@ -98,6 +111,7 @@ namespace MaxLineLength
 
             _view.LayoutChanged -= OnLayoutChanged;
             _view.Closed -= OnViewClosed;
+            _formatMap.FormatMappingChanged -= OnFormatMappingChanged;
             _refreshCoordinator.Unregister(this);
             RemoveRuler();
             _threadHelper.Dispose();
@@ -186,7 +200,10 @@ namespace MaxLineLength
                 return;
             }
 
-            _ruler.Stroke = lineSource.DefaultTextProperties.ForegroundBrush;
+            var properties = _formatMap.GetProperties(
+                MaxLineLengthRulerFormatDefinition.FormatName);
+            _ruler.Stroke = properties[EditorFormatDefinition.ForegroundBrushId] as Brush ??
+                lineSource.DefaultTextProperties.ForegroundBrush;
             _ruler.X1 = _ruler.X2 = lineSource.BaseIndentation + 0.5 + (_column.Value * lineSource.ColumnWidth);
             _ruler.Y1 = _view.ViewportTop;
             _ruler.Y2 = _view.ViewportBottom;

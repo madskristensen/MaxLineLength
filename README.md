@@ -39,9 +39,13 @@ max_line_length = 120
 
 Open a matching file in Visual Studio. The extension displays a vertical ruler immediately after column 120. Nested `.editorconfig` files and more specific sections work normally because Visual Studio resolves the effective setting for each document.
 
+Customize the ruler color under **Tools > Options > Environment > Fonts and Colors** by selecting **Text Editor** and changing **Max Line Length ruler**. Open rulers update immediately and use the selected foreground color exactly.
+
 Change the value and save `.editorconfig` to update the convention. All open document rulers independently resolve their effective setting and move to the applicable column. Remove the property, set it to `unset`, or use an invalid value to hide the ruler and disable reflow.
 
 Run **Format Document** or **Format Selection** to apply the configured limit. Plain-text documents wrap at the last whitespace before the limit and preserve indentation.
+
+Protect content that requires exact layout with `@formatter:off` and `@formatter:on` markers in the language's comment syntax. For example, use `// @formatter:off` in C#, `' @formatter:off` in Visual Basic, or `<!-- @formatter:off -->` in Markdown. Marker lines and everything between them remain unchanged.
 
 To use reflow with Code Cleanup, open **Configure Code Cleanup**, edit a profile, and enable **Reflow lines to configured maximum length**. The fixer is disabled by default so existing cleanup profiles do not change unexpectedly. Once enabled, it runs for document cleanup and cleanup on save. Project and solution cleanup are not supported.
 
@@ -55,12 +59,14 @@ To use reflow with Code Cleanup, open **Configure Code Cleanup**, edit a profile
 - Honors `indent_size`, `indent_style`, and `tab_width` when calculating visual columns.
 - Follows editor scrolling, zoom, font, and viewport changes.
 - Stays hidden in diff views.
-- Uses the editor foreground color with reduced opacity so it fits light, dark, and high-contrast themes.
+- Exposes the ruler foreground as **Max Line Length ruler** in Visual Studio's Fonts and Colors settings, with a visible system-gray default.
 - Groups built-in formatting and reflow into a single undo transaction.
 - Provides an opt-in Code Cleanup profile item for document cleanup and cleanup on save.
 - Restricts **Format Selection** reflow to complete selected lines or complete C# or Visual Basic syntax constructs.
 - Reflows C# lists, fluent invocation chains, logical and null-coalescing expressions, conditional expressions, LINQ query clauses, and line comments.
-- Reflows Visual Basic argument, parameter, type, initializer, and tuple lists plus line and documentation comments.
+- Reflows C# and Visual Basic XML documentation prose while preserving structured regions such as lists, examples, preformatted text, and code.
+- Reflows Visual Basic argument, parameter, type, initializer, and tuple lists plus line comments.
+- Honors `@formatter:off` and `@formatter:on` regions in supported documents.
 - Leaves C# and Visual Basic string and character literals unchanged because inserting raw newlines would produce invalid or semantically different code.
 - Reflows classified comments only in F#, JavaScript, TypeScript, C++, CSS, LESS, SCSS, and SQL; executable expressions remain unchanged.
 - Reflows ordinary Markdown paragraphs but leaves front matter, headings, lists, block quotes, tables, fenced or indented code, inline code, HTML, and hard line breaks unchanged.

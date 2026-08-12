@@ -18,14 +18,17 @@ namespace MaxLineLength
         {
             cancellationToken.ThrowIfCancellationRequested();
             SourceText sourceText = SourceText.From(text);
+            TextSpan[] mergedSpans = MergeSpans(commentSpans, cancellationToken).ToArray();
+            IReadOnlyList<TextSpan> suppressedSpans = ReflowSuppression.GetSpans(sourceText, mergedSpans);
             var changes = new List<TextChange>();
 
-            foreach (TextSpan span in MergeSpans(commentSpans, cancellationToken))
+            foreach (TextSpan span in mergedSpans)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (span.End > sourceText.Length ||
                     (scope.HasValue && !scope.Value.Contains(span)) ||
+                    ReflowSuppression.OverlapsAny(suppressedSpans, span) ||
                     !HasOverlengthLine(
                         sourceText,
                         span,

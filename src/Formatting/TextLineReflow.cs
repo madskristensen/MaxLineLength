@@ -16,6 +16,7 @@ namespace MaxLineLength
         {
             cancellationToken.ThrowIfCancellationRequested();
             SourceText sourceText = SourceText.From(text);
+            IReadOnlyList<TextSpan> suppressedSpans = ReflowSuppression.GetSpans(sourceText);
             var changes = new List<TextChange>();
 
             foreach (TextLine line in sourceText.Lines)
@@ -23,7 +24,8 @@ namespace MaxLineLength
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (line.Span.IsEmpty ||
-                    (scope.HasValue && !scope.Value.Contains(line.Span)))
+                    (scope.HasValue && !scope.Value.Contains(line.Span)) ||
+                    ReflowSuppression.OverlapsAny(suppressedSpans, line.SpanIncludingLineBreak))
                 {
                     continue;
                 }

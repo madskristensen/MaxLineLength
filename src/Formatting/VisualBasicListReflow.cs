@@ -25,6 +25,10 @@ namespace MaxLineLength
                 sourceText,
                 cancellationToken: cancellationToken);
             SyntaxNode root = tree.GetRoot(cancellationToken);
+            SyntaxTrivia[] trivia = root.DescendantTrivia(descendIntoTrivia: false).ToArray();
+            IReadOnlyList<TextSpan> suppressedSpans = ReflowSuppression.GetSpans(
+                sourceText,
+                trivia.Select(item => item.FullSpan));
             var changes = new Dictionary<int, TextChange>();
 
             foreach (SyntaxNode node in root.DescendantNodes())
@@ -34,6 +38,7 @@ namespace MaxLineLength
                 if (!IsSupportedList(node) ||
                     node.ContainsDiagnostics ||
                     (scope.HasValue && !scope.Value.Contains(node.Span)) ||
+                    ReflowSuppression.OverlapsAny(suppressedSpans, node.FullSpan) ||
                     !HasOverlengthLine(node, sourceText, maxLineLength, tabSize))
                 {
                     continue;
@@ -60,14 +65,16 @@ namespace MaxLineLength
             }
 
             TextChange[] syntaxChanges = changes.Values.OrderBy(change => change.Span.Start).ToArray();
-            foreach (SyntaxTrivia trivia in root.DescendantTrivia(descendIntoTrivia: false))
+            foreach (SyntaxTrivia item in trivia)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                TextSpan commentSpan = trivia.FullSpan;
+                TextSpan commentSpan = item.FullSpan;
                 string comment = sourceText.ToString(commentSpan);
 
                 if (!comment.StartsWith("'", StringComparison.Ordinal) ||
+                    comment.StartsWith("'''", StringComparison.Ordinal) ||
                     (scope.HasValue && !scope.Value.Contains(commentSpan)) ||
+                    ReflowSuppression.OverlapsAny(suppressedSpans, commentSpan) ||
                     OverlapsAny(syntaxChanges, commentSpan))
                 {
                     continue;
@@ -92,6 +99,23 @@ namespace MaxLineLength
                 if (!string.Equals(comment, replacement, StringComparison.Ordinal))
                 {
                     changes[commentSpan.Start] = new TextChange(commentSpan, replacement);
+                }
+            }
+
+            foreach (TextChange change in DocumentationCommentReflow.GetChanges(
+                text,
+                trivia.Where(item => sourceText.ToString(item.FullSpan).StartsWith("'''", StringComparison.Ordinal))
+                    .Select(item => item.FullSpan),
+                maxLineLength,
+                scope,
+                newLine,
+                tabSize,
+                suppressedSpans,
+                cancellationToken))
+            {
+                if (!OverlapsAny(syntaxChanges, change.Span))
+                {
+                    changes[change.Span.Start] = change;
                 }
             }
 
