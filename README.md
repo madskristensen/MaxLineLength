@@ -1,9 +1,14 @@
+[marketplace]: <https://marketplace.visualstudio.com/items?itemName=MadsKristensen.MaxLineLength>
+[vsixgallery]: <https://www.vsixgallery.com/extension/MaxLineLength.bbc727b4-1dfb-4d9e-a159-032529f396ed>
 [repo]: <https://github.com/madskristensen/MaxLineLength>
 
 # Max Line Length for Visual Studio
 
 [![Build](https://github.com/madskristensen/MaxLineLength/actions/workflows/build.yaml/badge.svg)](https://github.com/madskristensen/MaxLineLength/actions/workflows/build.yaml)
+[![Install from VSIX Gallery](https://www.vsixgallery.com/badge/MaxLineLength.bbc727b4-1dfb-4d9e-a159-032529f396ed.png)][vsixgallery]
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/madskristensen)](https://github.com/sponsors/madskristensen)
+
+Install Max Line Length from the [Visual Studio Marketplace][marketplace] or get the latest CI build from [Open VSIX Gallery][vsixgallery].
 
 ----
 
